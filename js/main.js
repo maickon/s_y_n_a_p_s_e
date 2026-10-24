@@ -7,8 +7,7 @@ import { createBg } from './render/bg.js';
 import { loadTTS } from './tts/mespeak.js';
 import { transcribe } from './ai/whisper.js';
 import { align, groups, toSRT } from './core/words.js';
-import { drawCaptions } from './render/captions.js';
-import { drawImages } from './render/images.js';
+import { createCompositor } from './render/compositor.js';
 import { assets, addAsset, removeAsset, parseUrls, plan, segments } from './core/assets.js';
 
 const $ = id => document.getElementById(id);
@@ -19,10 +18,10 @@ Esquecemos o som da chuva antes da entropia final.
 Sua consciência foi transcrita com sucesso no servidor do nada.`;
 
 const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-select'), pitch: $('voice-pitch'), rate: $('voice-rate') };
-const cv = $('view-canvas'), g = cv.getContext('2d'), bg = createBg(), W = 1280, H = 720;
-const frame = (t, caps = [], segs = []) => { bg.draw(); g.drawImage(bg.canvas, 0, 0, W, H); drawImages(g, segs, t, W, H); drawCaptions(g, caps, t, W, H); };
+const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
+const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt'];
-let ctx, rec, chunks = [], track, caps = [], segs = [], busy = false;
+let ctx, rec, chunks = [], track, caps = [], segsCur = [], busy = false;
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
 const count = () => $('char-count').textContent = `${el.txt.value.length} caracteres`;
@@ -72,7 +71,7 @@ $('btn-manifest').onclick = async () => {
     caps = groups(track.timeline);
     await syncUrls();
     const P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
-    segs = segments(track.timeline, P, track.duration);
+    comp.load(segsCur = segments(track.timeline, P, track.duration));
     grid(P);
     await play(track);
   } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
@@ -110,7 +109,7 @@ function play({ buffer, timeline, duration }) {
       }
       const dt = cur >= 0 ? t - timeline[cur].start : 9;
       bg.u.glitch.value = Math.max(0, 1 - dt / .3);
-      bg.u.t.value = t * 1.8; frame(t, caps, segs);
+      bg.u.t.value = t * 1.8; frame(t, { caps, timeline, style });
       if (t < duration + .3) return requestAnimationFrame(loop);
       stop(); rec.onstop = () => { EXP.forEach(b => enable($(b), true)); res(); };
       rec.stop(); status('CONCLUÍDO', 'bg-purple-500');
@@ -155,3 +154,5 @@ $('img-files').onchange = async e => {
   e.target.value = ''; grid();
 };
 $('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
+// render determinístico por tempo (debug/export)
+window.synapse = { comp, get segs() { return segsCur; }, frame: t => (bg.u.t.value = t * 1.8, frame(t, { caps, timeline: track?.timeline || [], style: el.style.selectedIndex })), get duration() { return track?.duration || 0; } };
