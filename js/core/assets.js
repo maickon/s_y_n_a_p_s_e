@@ -6,10 +6,10 @@ import { clipMatrix } from '../ai/clip.js';
 
 export const assets = []; // {id, src, img, tag, credit, origin}
 
-export async function addAsset({ src, tag = '', credit = '', origin = 'url' }) {
+export async function addAsset({ src, tag = '', credit = '', origin = 'url', id }) {
   const a = assets.find(x => x.src === src);
   if (a) return a;
-  const n = { id: Math.random().toString(36).slice(2), src, img: await loadImage(src), tag, credit, origin };
+  const n = { id: id || Math.random().toString(36).slice(2), src, img: await loadImage(src), tag, credit, origin };
   assets.push(n);
   return n;
 }

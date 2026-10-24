@@ -25,8 +25,9 @@ import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
-import { warn, ask, progress } from './ui/modal.js';
+import { warn, ask, progress, modal } from './ui/modal.js';
 import * as store from './core/store.js';
+import * as projects from './core/projects.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -75,7 +76,7 @@ async function run(fn) {
   busy = true; ['btn-manifest', 'btn-vary', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
-  if (pendingGen) { pendingGen = false; setTimeout(() => $('btn-manifest').click()); }
+  if (pendingGen) { pendingGen = false; setTimeout(() => generate()); }
   if (mix) ['btn-vary', ...EXP].forEach(b => enable($(b), true));
 }
 
@@ -96,10 +97,12 @@ async function render() {
   pl.setBuffer(mix);
   if (first && navigator.userActivation?.hasBeenActive) pl.play(0);
   status('PREVIEW PRONTO', 'bg-emerald-500');
+  saveWS();
 }
 
-let pendingGen = false;
-$('btn-manifest').onclick = () => {
+let pendingGen = false, restored = null, dirty = false;
+$('btn-manifest').onclick = () => generate();
+function generate() {
   if (busy) return pendingGen = true;
   const scenes = splitScenes(el.txt.value);
   if (!scenes.length) return warn('Digite um roteiro válido.');
@@ -113,11 +116,14 @@ $('btn-manifest').onclick = () => {
     } catch (e) { console.warn('Whisper indisponível, usando estimativa', e); }
     caps = groups(track.timeline, capMax());
     await syncUrls();
-    P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
-    variation = 0; ov = [];
+    const texts = track.timeline.map(s => s.text), R = restored && restored.texts?.join('\n') === texts.join('\n') ? restored : null;
+    if (R) { P = R.P.map(l => l.map(id => assets.find(a => a.id === id)).filter(Boolean)); variation = R.variation || 0; ov = (R.ov || []).map(o => o && { ...o, img: o.img && assets.find(a => a.id === o.img) }); }
+    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
+    if (!R) { variation = 0; ov = []; }
+    restored = null;
     await render();
   });
-};
+}
 $('btn-vary').onclick = () => track && run(() => (variation++, render()));
 
 // --- Edição ao vivo: aplica mudanças sem parar o player ---
@@ -478,22 +484,80 @@ showTab(await store.get('tab') || 'script');
 $('btn-export-menu').onclick = e => { e.stopPropagation(); $('export-menu').classList.toggle('hidden'); };
 document.addEventListener('click', e => !e.target.closest('#export-menu') && $('export-menu').classList.add('hidden'));
 let lastGen = '', genT;
-const gen = () => { if (busy) return genT = setTimeout(gen, 800); if (el.txt.value.trim() && el.txt.value !== lastGen) { lastGen = el.txt.value; $('btn-manifest').click(); } };
+const gen = () => { if (busy) return genT = setTimeout(gen, 800); if (el.txt.value.trim() && el.txt.value !== lastGen) { lastGen = el.txt.value; generate(); } };
 el.txt.addEventListener('input', () => { clearTimeout(genT); if ($('auto-gen').checked) genT = setTimeout(gen, 1800); });
-el.txt.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); lastGen = el.txt.value; $('btn-manifest').click(); } });
+el.txt.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); lastGen = el.txt.value; generate(); } });
+
+// --- Projetos: autosave do espaço de trabalho + gerenciador ---
+let curId = await store.get('curProject');
+if (!curId) { curId = projects.newId(); await store.set('curProject', curId); }
+const saveWS = () => { store.set('ws', { variation, texts: track?.timeline.map(s => s.text), ov: ov.map(o => o && { ...o, img: o.img?.id }), P: P.map(l => l.map(a => a.id)),
+  ext: assets.filter(a => a.origin !== 'file').map(({ id, src, tag, credit, origin }) => ({ id, src, tag, credit, origin })) }); dirty = true; };
+const projName = () => $('video-title').value.trim() || el.txt.value.trim().split(/[.!?\n]/)[0].slice(0, 40) || 'Sem título';
+const thumb = () => { const c = Object.assign(document.createElement('canvas'), { width: 192, height: Math.round(192 * VH / VW) }); c.getContext('2d').drawImage(cv, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', .6); };
+async function saveProject() { dirty = false; await projects.snapshot(curId, { name: projName(), thumb: mix ? thumb() : undefined, aspect: $('aspect').value, scenes: track?.timeline.length || 0 }); showProj(); }
+const showProj = async () => { const p = (await projects.list()).find(x => x.id === curId); $('proj-name').textContent = p?.name || projName(); $('proj-saved').textContent = '✓'; };
+document.addEventListener('input', () => dirty = true, true); document.addEventListener('change', () => dirty = true, true);
+setInterval(() => dirty && !busy && saveProject(), 3000);
+const flushProj = async () => { await new Promise(r => setTimeout(r, 450)); saveWS(); await saveProject(); };
+const ago = t => { const s = (Date.now() - t) / 1e3; return s < 60 ? 'agora' : s < 3600 ? `${s / 60 | 0} min` : s < 86400 ? `${s / 3600 | 0} h` : new Date(t).toLocaleDateString('pt-BR'); };
+async function manager() {
+  await flushProj();
+  const o = document.createElement('div');
+  o.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4';
+  const draw = async () => {
+    const l = await projects.list();
+    o.innerHTML = `<div class="w-full max-w-3xl max-h-[85vh] flex flex-col bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-5 gap-4 text-zinc-300">
+      <div class="flex items-center gap-3"><h3 class="pane-h flex-1"><i data-lucide="folder-open" class="w-4 h-4"></i> Meus projetos <span class="text-zinc-600 normal-case tracking-normal">(${l.length})</span></h3>
+        <button data-new class="btn !py-1.5 bg-purple-700 hover:bg-purple-600 text-white"><i data-lucide="plus" class="w-4 h-4"></i> Novo projeto</button><button data-x class="pbtn text-zinc-400">✕</button></div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto pr-1">${l.map(p => `
+        <div data-id="${p.id}" class="rounded-lg border ${p.id === curId ? 'border-emerald-500' : 'border-zinc-800 hover:border-purple-600'} bg-zinc-900/60 overflow-hidden flex flex-col">
+          <div data-open class="aspect-video bg-black bg-center bg-contain bg-no-repeat cursor-pointer relative" style="background-image:url('${p.thumb || ''}')">${p.id === curId ? '<span class="absolute top-1 left-1 text-[10px] bg-emerald-600 text-white px-1.5 rounded">ABERTO</span>' : ''}<span class="absolute bottom-1 right-1 text-[10px] bg-black/70 px-1.5 rounded">${p.aspect || '16:9'}</span></div>
+          <div class="p-2 flex flex-col gap-1"><b class="truncate text-zinc-200 text-xs" title="${escH(p.name)}">${escH(p.name)}</b><span class="text-[10px] text-zinc-500">${p.scenes || 0} cenas · editado ${ago(p.updated)}</span>
+            <div class="flex gap-1 mt-1"><button data-open class="flex-1 text-[11px] py-1 rounded bg-emerald-800 hover:bg-emerald-700 text-white">Abrir</button>
+              <button data-ren class="pbtn" title="Renomear"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button data-dup class="pbtn" title="Duplicar"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button><button data-del class="pbtn text-red-400" title="Excluir"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div></div></div>`).join('')}</div></div>`;
+    lucide.createIcons({ root: o });
+  };
+  document.body.appendChild(o); await draw();
+  const close = () => o.remove();
+  o.onclick = async e => {
+    if (e.target === o || e.target.closest('[data-x]')) return close();
+    if (e.target.closest('[data-new]')) return projects.create();
+    const card = e.target.closest('[data-id]'); if (!card) return;
+    const id = card.dataset.id, p = (await projects.list()).find(x => x.id === id);
+    if (e.target.closest('[data-open]')) return id === curId ? close() : projects.open(id);
+    if (e.target.closest('[data-dup]')) { await projects.duplicate(id); return draw(); }
+    if (e.target.closest('[data-ren]')) {
+      const pr = modal({ title: 'Renomear projeto', html: `<input id="ren-in" class="inp" value="${escH(p.name)}">`, buttons: [{ label: 'Cancelar', value: null }, { label: 'Salvar', value: 'ok', primary: true }] });
+      const inp = document.getElementById('ren-in'); let nv = inp.value; inp.oninput = e => nv = e.target.value; inp.focus(); inp.select();
+      if (await pr && nv.trim()) await projects.rename(id, nv.trim()); return draw();
+    }
+    if (e.target.closest('[data-del]')) {
+      if (!await ask(`Excluir o projeto "${p.name}"? Isso não pode ser desfeito.`)) return;
+      await projects.remove(id);
+      if (id === curId) { const r = await projects.list(); return r.length ? projects.open(r[0].id) : projects.create(); }
+      return draw();
+    }
+  };
+}
+$('btn-projects').onclick = manager;
 
 // --- Persistência (IndexedDB) ---
-const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
-const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
+const addFile = (f, id) => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file', id }).then(a => (a.blob = f, a)).catch(() => { });
+const saveFiles = () => { store.set('imgs', assets.filter(a => a.blob).map(a => ({ id: a.id, blob: a.blob }))); dirty = true; };
 await store.bindForm(() => {
   vigUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
 await setWm(await store.get('wm')).catch(() => { });
 readText();
-for (const f of await store.get('imgs') || []) await addFile(f);
+for (const f of await store.get('imgs') || []) await (f instanceof Blob ? addFile(f) : addFile(f.blob, f.id));
 grid();
+const ws = await store.get('ws');
+if (ws) { await Promise.allSettled((ws.ext || []).map(a => addAsset(a))); restored = ws; grid(); }
 const ms = await store.get('music');
 if (ms) try { music = { ...ms, buf: await decodeAudio(ms.blob) }; $('music-name').textContent = '♪ ' + ms.name; $('music-clear').classList.remove('hidden'); } catch { }
 // prévia automática ao abrir
-if ($('auto-gen').checked && el.txt.value.trim()) { lastGen = el.txt.value; $('btn-manifest').click(); }
+if ($('auto-gen').checked && el.txt.value.trim()) { lastGen = el.txt.value; generate(); }
+showProj();
+dirty = true;
