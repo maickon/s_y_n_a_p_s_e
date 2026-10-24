@@ -1,0 +1,14 @@
+:root{--g:#00ff66;--p:#9d00ff;--k:#ff0055}
+body{font-family:'Fira Code',monospace;background:#050508;color:#d1d5db;overflow-x:hidden}
+.font-syne{font-family:'Syne',sans-serif}
+.crt::after{content:"";position:absolute;inset:0;z-index:20;pointer-events:none;opacity:.7;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,.4) 50%),linear-gradient(90deg,rgba(255,0,0,.03),rgba(0,255,0,.01),rgba(0,0,255,.03));background-size:100% 4px,6px 100%}
+.glitch{position:relative;text-shadow:0 0 8px var(--p)}
+.glitch::before,.glitch::after{content:attr(data-text);position:absolute;inset:0;clip:rect(0,0,0,0)}
+.glitch::before{left:-2px;text-shadow:2px 0 var(--k);animation:g1 3s infinite linear alternate-reverse}
+.glitch::after{left:2px;text-shadow:-2px 0 var(--g);animation:g2 2s infinite linear alternate-reverse}
+@keyframes g1{0%{clip:rect(20px,9999px,15px,0)}33%{clip:rect(50px,9999px,80px,0)}66%{clip:rect(10px,9999px,40px,0)}100%{clip:rect(60px,9999px,50px,0)}}
+@keyframes g2{0%{clip:rect(80px,9999px,10px,0)}50%{clip:rect(40px,9999px,20px,0)}100%{clip:rect(30px,9999px,60px,0)}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#0d0e15}::-webkit-scrollbar-thumb{background:#26293b;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--p)}
+.btn{font-weight:700;padding:.75rem 1rem;border-radius:.5rem;display:flex;align-items:center;justify-content:center;gap:.5rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;transition:.2s}
+.inp{width:100%;background:#18181b;border:1px solid #27272a;border-radius:.5rem;padding:.65rem;font-size:.85rem;outline:none}
+.inp:focus{border-color:#a855f7}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S.Y.N.A.P.S.E - Gerador Surrealista de Vídeo</title>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js"}}</script>
+</head>
+<body class="min-h-screen flex flex-col">
+<header class="border-b border-purple-900/40 bg-black/60 backdrop-blur-md p-4 sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto flex justify-between items-center gap-3">
+    <div class="flex items-center gap-3">
+      <i data-lucide="brain-circuit" class="w-8 h-8 text-emerald-400 animate-pulse"></i>
+      <div>
+        <h1 class="text-2xl font-syne font-extrabold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 glitch" data-text="S.Y.N.A.P.S.E v5.0">S.Y.N.A.P.S.E v5.0</h1>
+        <p class="text-xs text-emerald-500/70 tracking-widest uppercase">Gerador de Vídeo Distópico Procedural</p>
+      </div>
+    </div>
+    <span class="hidden sm:inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-800/50">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> NÚCLEO NEURAL: ATIVO</span>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+  <section class="lg:col-span-5 flex flex-col gap-4 bg-zinc-950/80 p-5 rounded-xl border border-purple-900/30">
+    <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+      <h2 class="text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="terminal" class="w-4 h-4"></i> Roteiro</h2>
+      <button id="btn-preset" class="text-xs text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Exemplo</button>
+    </div>
+    <div>
+      <textarea id="script-input" class="inp h-48 lg:h-60 text-emerald-300 resize-none leading-relaxed" placeholder="Cada frase vira uma cena..."></textarea>
+      <div class="text-[10px] text-zinc-500 mt-1 flex justify-between"><span>Frases (. ! ?) ou linhas = cenas.</span><span id="char-count">0 caracteres</span></div>
+    </div>
+    <label class="text-xs font-semibold text-zinc-400 flex flex-col gap-2"><span class="flex items-center gap-2"><i data-lucide="mic" class="w-4 h-4 text-purple-400"></i> Voz Sintética</span>
+      <select id="voice-select" class="inp"></select></label>
+    <label class="text-xs font-semibold text-zinc-400 flex flex-col gap-2"><span class="flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4 text-purple-400"></i> Dimensão Estética</span>
+      <select id="style-select" class="inp">
+        <option>Sonho Analógico (Vaporware CRT)</option><option>Abismo Cósmico (Túnel 3D)</option>
+        <option>Entropia Digital (Ruído Simplex)</option><option>Câmara de Eco Liminar (Wireframe)</option>
+      </select></label>
+    <div class="grid grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400">
+      <label>Tom <span id="pitch-val" class="text-purple-400 float-right">40</span><input type="range" id="voice-pitch" min="0" max="99" value="40" class="w-full accent-purple-500 mt-1"></label>
+      <label>Velocidade <span id="rate-val" class="text-purple-400 float-right">150</span><input type="range" id="voice-rate" min="80" max="260" step="5" value="150" class="w-full accent-purple-500 mt-1"></label>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <button id="btn-test" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="volume-2" class="w-4 h-4"></i> Testar Voz</button>
+      <button id="btn-manifest" class="btn bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 text-white"><i data-lucide="play-circle" class="w-4 h-4"></i> Manifestar</button>
+      <button id="btn-export" disabled class="btn bg-emerald-700 hover:bg-emerald-600 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> Vídeo WebM</button>
+      <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Voz WAV</button>
+    </div>
+  </section>
+
+  <section class="lg:col-span-7 flex flex-col gap-4">
+    <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-purple-900/40 shadow-2xl crt">
+      <canvas id="view-canvas" width="1280" height="720" class="w-full h-full"></canvas>
+      <div id="subtitle-box" class="absolute bottom-8 inset-x-6 text-center pointer-events-none z-10 hidden">
+        <span id="subtitle-text" class="inline-block bg-black/80 text-emerald-300 font-extrabold text-lg md:text-2xl px-4 py-2 rounded-md border border-emerald-500/50 uppercase tracking-wide"></span>
+      </div>
+      <div class="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-zinc-400">
+        <span id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-600"></span><span id="status-text">CARREGANDO VOZ...</span></div>
+      <div class="absolute top-4 right-4 z-10 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-purple-400"><span id="scene-hash">HASH: 0x000000</span></div>
+    </div>
+    <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-wrap gap-3 justify-between text-xs text-zinc-400">
+      <span>Cena: <strong id="scene-counter" class="text-zinc-200">0/0</strong> · 1280x720</span>
+      <span class="flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i> eSpeak WASM · WebAudio · 100% Client-Side</span>
+    </div>
+  </section>
+</main>
+<footer class="border-t border-zinc-900 bg-black/40 p-3 text-center text-xs text-zinc-600">S.Y.N.A.P.S.E © 2026 · Processamento local.</footer>
+<script>lucide.createIcons()</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
