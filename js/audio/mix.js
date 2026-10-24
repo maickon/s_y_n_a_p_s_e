@@ -1,10 +1,10 @@
 import { music } from './music.js';
 import { ambience } from './ambience.js';
 import { STYLES } from '../core/styles.js';
-import { sfx } from './sfx.js';
+import { sfx, sting } from './sfx.js';
 
 // mixdown offline estéreo: voz + música (ducking) + ambiente + efeitos
-export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', norm = true }) {
+export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', intro, norm = true }) {
   const ST = STYLES[style] || STYLES[0];
   const sr = 44100, D = duration + 1.5, ctx = new OfflineAudioContext(2, Math.ceil(D * sr), sr);
   const master = new GainNode(ctx), lim = new DynamicsCompressorNode(ctx, { threshold: -8, knee: 6, ratio: 6, attack: .004, release: .2 });
@@ -21,7 +21,9 @@ export async function mixdown({ voice, timeline, segs, duration, style, seed, mu
   else music(ctx, duck, D, ST.mus, seed);
 
   ambience(ctx, bus(vol.amb), D, amb === 'auto' ? ST.amb : amb, seed);
-  sfx(ctx, bus(vol.sfx, false), segs, timeline, pack === 'auto' ? ST.sfx : pack, seed);
+  const sb = bus(vol.sfx, false);
+  sfx(ctx, sb, segs, timeline, pack === 'auto' ? ST.sfx : pack, seed);
+  if (intro?.sound && intro.sound !== 'none') { sting(ctx, sb, intro.sound, intro.dur, seed); duck.gain.setValueAtTime(.35, 0); duck.gain.setTargetAtTime(1, intro.dur * .8, .4); }
 
   const out = await ctx.startRendering();
   // normaliza estéreo (-1 dBFS)

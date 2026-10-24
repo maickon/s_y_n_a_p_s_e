@@ -1,5 +1,6 @@
 import { W, H, cl, ease } from './layouts.js';
 import { fontOf } from './captions.js';
+import { drawVignette } from './vignette.js';
 
 const GL = '█▓▒░<>/\\|_=+*#@$%&01';
 const scramble = (s, p, seed) => [...s].map((c, i) => { const k = p * s.length * 1.5 - i; return k >= 1 || c === ' ' ? c : k > 0 ? GL[(seed + i * 7 + (p * 90 | 0)) % GL.length] : ' '; }).join('');
@@ -7,7 +8,8 @@ let FONT = 'Syne';
 const fit = (g, txt, px, max, w = 800) => { g.font = `${w} ${px}px "${FONT}", sans-serif`; const m = g.measureText(txt).width; if (m > max) g.font = `${w} ${px * max / m | 0}px "${FONT}", sans-serif`; };
 
 export function drawIntro(g, t, I, o = {}) {
-  if (!I || t > I.b) return;
+  if (!I || I.none || t > I.b) return;
+  if (I.vig) return drawVignette(g, t, I.vig, o);
   FONT = fontOf(o, 'title');
   g.save();
   g.globalAlpha = cl((I.b - t) / .5);

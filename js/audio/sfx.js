@@ -51,3 +51,12 @@ export function sfx(ctx, out, segs, timeline, pack = 'cinematic', seed = 1) {
   timeline.forEach((s, i) => { play(P.hit[(seed + i) % P.hit.length], s.start - .05, i ? .6 : 1); if (i && i % 3 === 0) play('riser', s.start - .1, .8); });
   segs.forEach(s => { const l = BY[s.trans] || BY.fade; play(l[s.seed % l.length], s.a + .3); if (P.add && s.trans === 'glitch') play(P.add, s.a + .35, .6); });
 }
+
+// assinatura sonora da vinheta de abertura
+export function sting(ctx, out, kind, d, seed = 1) {
+  const r = rng(seed), hit = d * .45, P = (n, t, v = 1) => LIB[n](ctx, out, Math.max(.02, t), v, r);
+  if (kind === 'cinematic') { P('riser', hit, .9); P('hit', hit); P('pianoStab', hit, .8); P('swell', d * .9, .5); }
+  else if (kind === 'digital') { P('dataChirp', .15, .8); P('stutter', .35); P('zap', hit); P('boom', hit, .8); P('dataChirp', hit + .3, .5); }
+  else if (kind === 'ethereal') { P('shimmer', .1); P('tonalRiser', hit); P('chimes', hit); P('swell', hit + .2, .6); }
+  else if (kind === 'impact') { P('heartbeat', .2); P('whooshDeep', hit - .05); P('hit', hit); P('boom', hit + .02, .7); }
+}

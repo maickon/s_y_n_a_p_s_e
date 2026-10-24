@@ -18,9 +18,10 @@ import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES } from './render/layouts
 import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
 import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
+import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
-import { warn, progress } from './ui/modal.js';
+import { warn, ask, progress } from './ui/modal.js';
 import * as store from './core/store.js';
 
 const $ = id => document.getElementById(id);
@@ -54,10 +55,11 @@ loadTTS().then(() => status('MOTOR DE VOZ PRONTO', 'bg-emerald-500')).catch(e =>
 let warned = false;
 async function makeTrack(scenes) {
   const t = await buildVoiceTrack(scenes, {
-    voice: el.voice.value, effect: $('effect-select').value, tom: +el.pitch.value, speed: +el.rate.value, lead: scenes.length > 1 ? INTRO : .3,
+    voice: el.voice.value, effect: $('effect-select').value, tom: +el.pitch.value, speed: +el.rate.value, lead: introCfg().dur,
     onDownload: e => e?.total && status(`BAIXANDO MODELO DE VOZ ${e.loaded / e.total * 100 | 0}%`, 'bg-yellow-400 animate-pulse'),
     onProgress: (i, n) => status(`SINTETIZANDO VOZ ${i + 1}/${n}`, 'bg-yellow-400 animate-pulse')
   });
+  t.lead = introCfg().dur;
   if (t.fallback && !warned) { warned = true; warn('Não foi possível carregar a voz escolhida (rede ou modelo indisponível).\nUsando eSpeak como alternativa.'); }
   return t;
 }
@@ -85,14 +87,16 @@ async function run(fn) {
 
 // edição -> mix -> reprodução/gravação
 async function render() {
+  const ic = introCfg();
+  if (Math.abs(track.lead - ic.dur) > .01) shiftTrack(ic.dur);
   dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(),
     credits: ['Voz: ' + el.voice.selectedOptions[0].text + ' · ' + el.voice.value.split(':')[0], 'Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')],
-    outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
+    intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
   readText();
   comp.load(segsCur = dir.segs);
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
-    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
@@ -330,15 +334,76 @@ function readText() {
   [TX.font, TX.titleFont, 'Syne'].forEach(f => f !== 'auto' && document.fonts.load(`800 40px "${f}"`).then(() => !pl.playing && drawAt(pl.time)));
   if (!pl.playing) drawAt(pl.time);
 }
-$('text-panel').addEventListener('input', e => e.target.id !== 'wm-file' && !/outro/.test(e.target.id) && readText());
-$('text-panel').addEventListener('change', e => e.target.id !== 'wm-file' && !/outro/.test(e.target.id) && readText());
+$('text-panel').addEventListener('input', e => !/wm-file|outro|vig/.test(e.target.id) && readText());
+$('text-panel').addEventListener('change', e => !/wm-file|outro|vig/.test(e.target.id) && readText());
 const setWm = async f => { if (!f) return; const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); TX.wm.img = im; };
 $('wm-file').onchange = async e => { const f = e.target.files[0]; if (!f) return; await setWm(f); store.set('wm', f); $('wm-type').value = 'image'; readText(); };
+
+// --- Vinhetas de abertura ---
+let vigs = await store.get('vigs') || [], vEdit = null;
+const vimg = {}, TPLS = Object.keys(VIG_TPL);
+const loadVimg = async v => { if (v.img && !vimg[v.id]) { const i = new Image(); i.src = URL.createObjectURL(v.img); await i.decode().catch(() => { }); vimg[v.id] = i; } };
+for (const v of vigs) await loadVimg(v);
+function introCfg() {
+  const a = $('vig-active').value, v = vigs.find(x => x.id === a);
+  return a === 'none' ? { dur: .3 } : v ? { dur: v.dur, vig: { ...v, img: v.img && vimg[v.id] } } : { dur: INTRO };
+}
+// desloca a trilha de voz quando a duração da abertura muda (sem re-sintetizar)
+function shiftTrack(L) {
+  const d = L - track.lead, sr = track.buffer.sampleRate, n = Math.round(d * sr);
+  const mv = b => { const o = new AudioBuffer({ length: Math.max(1, b.length + n), sampleRate: sr, numberOfChannels: b.numberOfChannels }); for (let c = 0; c < b.numberOfChannels; c++) n >= 0 ? o.getChannelData(c).set(b.getChannelData(c), n) : o.getChannelData(c).set(b.getChannelData(c).subarray(-n)); return o; };
+  track.buffer = mv(track.buffer); track.dry = mv(track.dry);
+  track.timeline.forEach(s => { s.start += d; s.end += d; s.words.forEach(w => { w.s += d; w.e += d; }); });
+  track.duration += d; track.lead = L; caps = groups(track.timeline);
+}
+$('vig-tpl').innerHTML = Object.entries(VIG_TPL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+$('vig-snd').innerHTML = Object.entries(VIG_SND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+const saveVigs = () => store.set('vigs', vigs);
+function vigUI() {
+  const cur = $('vig-active').value;
+  $('vig-active').innerHTML = '<option value="title">Título automático</option><option value="none">Sem abertura</option>' + vigs.map(v => `<option value="${v.id}">★ ${v.name}</option>`).join('');
+  $('vig-active').value = [...$('vig-active').options].some(o => o.value === cur) ? cur : 'title';
+  $('vig-edit').innerHTML = vigs.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  const v = vigs.find(x => x.id === vEdit) || vigs[0];
+  $('vig-form').classList.toggle('hidden', !v);
+  if (!v) return;
+  vEdit = v.id; $('vig-edit').value = v.id;
+  for (const k of ['name', 'sub', 'dur', 'tpl', 'snd']) $('vig-' + k).value = v[k] ?? '';
+  $('vig-dur-v').textContent = v.dur + 's';
+  $('vig-thumb').classList.toggle('hidden', !v.img); $('vig-img-x').classList.toggle('hidden', !v.img);
+  if (v.img) $('vig-thumb').src = vimg[v.id]?.src || '';
+}
+const vigChanged = () => { saveVigs(); vigUI(); if (introCfg().vig?.id === vEdit) live(2); else if (!pl.playing) drawAt(pl.time); };
+$('vig-new').onclick = () => {
+  const id = 'v' + Date.now().toString(36), seed = Math.random() * 1e6 | 0;
+  vigs.push({ id, name: $('video-title').value.trim() || 'Minha Vinheta', sub: '', dur: 3, tpl: TPLS[seed % TPLS.length], snd: 'auto', seed, img: null });
+  vEdit = id; saveVigs(); vigUI(); $('vig-active').value = id; $('vig-active').dispatchEvent(new Event('change'));
+};
+$('vig-edit').onchange = e => { vEdit = e.target.value; vigUI(); };
+for (const k of ['name', 'sub', 'dur', 'tpl', 'snd']) $('vig-' + k).addEventListener(k === 'name' || k === 'sub' ? 'input' : 'change', e => {
+  const v = vigs.find(x => x.id === vEdit); if (!v) return;
+  v[k] = k === 'dur' ? +e.target.value : e.target.value; vigChanged();
+});
+$('vig-dur').oninput = e => $('vig-dur-v').textContent = e.target.value + 's';
+$('vig-rand').onclick = () => { const v = vigs.find(x => x.id === vEdit); if (!v) return; v.seed = Math.random() * 1e6 | 0; v.tpl = TPLS[v.seed % TPLS.length]; vigChanged(); };
+$('vig-del').onclick = async () => { if (!vEdit || !await ask('Excluir esta vinheta?')) return; vigs = vigs.filter(v => v.id !== vEdit); vEdit = null; vigChanged(); live(2); };
+$('vig-img').onchange = async e => { const v = vigs.find(x => x.id === vEdit), f = e.target.files[0]; if (!v || !f) return; v.img = f; delete vimg[v.id]; await loadVimg(v); e.target.value = ''; vigChanged(); };
+$('vig-img-x').onclick = () => { const v = vigs.find(x => x.id === vEdit); if (v) { v.img = null; vigChanged(); } };
+$('vig-active').addEventListener('change', () => live(2));
+// prévia: toca a abertura (com som se o vídeo já foi manifestado)
+$('vig-prev').onclick = () => {
+  if (mix) { pl.seek(0); pl.play(0); return; }
+  const ic = introCfg(), t0 = performance.now(), d = { intro: { title: ($('video-title').value || 'S.Y.N.A.P.S.E').toUpperCase(), b: ic.dur + .2, code: 7, vig: ic.vig, none: ic.dur < .5 } };
+  const loop = () => { const t = (performance.now() - t0) / 1e3; frame(t, { dir: d, tx: TX, style: el.style.selectedIndex }); if (t < ic.dur + .3) requestAnimationFrame(loop); };
+  loop();
+};
+vigUI();
 
 // --- Persistência (IndexedDB) ---
 const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
-await store.bindForm(() => { count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+await store.bindForm(() => {
+  vigUI(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await setWm(await store.get('wm')).catch(() => { });
 readText();
 for (const f of await store.get('imgs') || []) await addFile(f);
