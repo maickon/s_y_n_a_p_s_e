@@ -65,10 +65,10 @@ $('btn-test').onclick = async () => {
 const v = id => $(id).value / 100;
 async function run(fn) {
   if (busy) return;
-  busy = true; ['btn-manifest', 'btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), false));
+  busy = true; ['btn-manifest', 'btn-vary', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
-  if (mix) ['btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), true));
+  if (mix) ['btn-vary', ...EXP].forEach(b => enable($(b), true));
 }
 
 // edição -> mix -> reprodução/gravação
@@ -104,7 +104,25 @@ $('btn-manifest').onclick = () => {
   });
 };
 $('btn-vary').onclick = () => track && run(() => (variation++, render()));
-$('btn-apply').onclick = () => track && run(render);
+
+// --- Edição ao vivo: aplica mudanças sem parar o player ---
+// níveis: 1 = remixar áudio, 2 = refazer edição, 3 = reassociar imagens, 4 = re-sintetizar voz
+let pend = 0, liveT;
+const live = lv => { if (!track) return; pend = Math.max(pend, lv); clearTimeout(liveT); liveT = setTimeout(flush, 400); };
+async function flush() {
+  if (busy) return liveT = setTimeout(flush, 300);
+  const lv = pend; pend = 0;
+  await run(async () => {
+    if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline); }
+    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') }); }
+    await render();
+  });
+}
+const on = (ids, ev, lv) => ids.split(' ').forEach(id => $(id).addEventListener(ev, () => live(lv)));
+on('voice-select voice-pitch voice-rate', 'change', 4);
+on('img-search img-clip', 'change', 3);
+on('video-title', 'input', 2);
+on('style-select amb-select vol-music vol-amb vol-sfx', 'change', 1);
 
 // quadro determinístico no tempo t (preview e export)
 function drawAt(t) {
@@ -151,7 +169,7 @@ function grid(P = []) {
     d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span><button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
     d.querySelector('img').onclick = () => goTo(a.img);
     d.querySelector('button').onclick = () => {
-      removeAsset(a);
+      removeAsset(a); live(3);
       if (a.origin === 'url') $('img-urls').value = $('img-urls').value.split('\n').filter(l => !l.includes(a.src)).join('\n');
       grid();
     };
@@ -171,9 +189,9 @@ async function syncUrls() {
 
 $('img-files').onchange = async e => {
   for (const f of e.target.files) await addAsset({ src: URL.createObjectURL(f), tag: f.name.replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).catch(() => {});
-  e.target.value = ''; grid();
+  e.target.value = ''; grid(); live(3);
 };
-$('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
+$('img-urls').onchange = () => track ? live(3) : syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
 // render determinístico por tempo (debug/export)
 // --- Player ---
 const fmt = t => `${t / 60 | 0}:${String(t % 60 | 0).padStart(2, '0')}`;
@@ -211,7 +229,7 @@ window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get dura
 // --- Trilha sonora ---
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 const setMusic = m => {
-  music = m;
+  music = m; live(1);
   $('music-name').textContent = m ? '♪ ' + m.name : '♪ Procedural (gerada pelo estilo)';
   $('music-clear').classList.toggle('hidden', !m);
 };
@@ -259,7 +277,7 @@ function editor() {
       <select data-k="trans" class="col-span-2 ${sel}">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select>
       <select data-k="img" class="col-span-2 ${sel}">${opts(Object.keys(imgs), imgs, o.img ? String(assets.indexOf(o.img)) : '', '')}</select>`;
     d.querySelector('button').onclick = () => pl.seek(Math.max(0, s.start - .3));
-    d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value }; });
+    d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value };  live(2); });
     return d;
   }));
 }
