@@ -7,7 +7,7 @@ Gerador de vídeo procedural 100% client-side (GitHub Pages). Texto → voz sint
 - [x] Etapa 2: legendas karaokê no canvas (estimativa silábica + Whisper opcional) + SRT
 - [x] Etapa 3: imagens (URL `palavra | url`, upload, busca Wikimedia+Openverse, proxy CORS wsrv.nl, CLIP opcional)
 - [x] Etapa 4: compositor PixiJS (5 layouts, 6 transições, glitch/RGB split nas trocas, CRT)
-- [ ] Etapa 5: trilhas, ambientes e efeitos + ducking
+- [x] Etapa 5: mixdown offline (música procedural por estilo, 5 ambientes, SFX nas transições, ducking, upload/Openverse)
 - [ ] Etapa 6: timeline automática GSAP
 - [ ] Etapa 7: export MP4 (Mediabunny)
 - [ ] Etapa 8: composição HyperFrames

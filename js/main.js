@@ -2,7 +2,9 @@ import { splitScenes, hash } from './core/script.js';
 import { buildVoiceTrack } from './core/voicetrack.js';
 import { VOICES } from './audio/fx.js';
 import { toWav } from './audio/wav.js';
-import { drone, glitch } from './audio/ambient.js';
+import { mixdown } from './audio/mix.js';
+import { AMBS } from './audio/ambience.js';
+import { searchAudio, decodeAudio } from './media/audiosearch.js';
 import { createBg } from './render/bg.js';
 import { loadTTS } from './tts/mespeak.js';
 import { transcribe } from './ai/whisper.js';
@@ -21,7 +23,7 @@ const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-s
 const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt'];
-let ctx, rec, chunks = [], track, caps = [], segsCur = [], busy = false;
+let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false;
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
 const count = () => $('char-count').textContent = `${el.txt.value.length} caracteres`;
@@ -72,22 +74,25 @@ $('btn-manifest').onclick = async () => {
     await syncUrls();
     const P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
     comp.load(segsCur = segments(track.timeline, P, track.duration));
+    status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
+    const v = id => $(id).value / 100;
+    mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: track.duration, style: el.style.selectedIndex, seed: hash(el.txt.value),
+      musicBuf: music?.buf, amb: $('amb-select').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+    track.duration = mix.duration;
     grid(P);
     await play(track);
   } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
 };
 
-function play({ buffer, timeline, duration }) {
+function play({ timeline, duration }) {
   ctx ??= new AudioContext();
   ctx.resume();
   const dest = ctx.createMediaStreamDestination(), style = el.style.selectedIndex;
   const bus = new GainNode(ctx, { gain: .8 }), lim = new DynamicsCompressorNode(ctx, { threshold: -6, ratio: 20, attack: .002 }), outs = [bus];
   bus.connect(lim); lim.connect(ctx.destination); lim.connect(dest);
-  const t0 = ctx.currentTime + .1, src = new AudioBufferSourceNode(ctx, { buffer });
+  const t0 = ctx.currentTime + .1, src = new AudioBufferSourceNode(ctx, { buffer: mix });
   outs.forEach(o => src.connect(o)); src.start(t0);
-  const stop = drone(ctx, outs, style, t0);
-  timeline.forEach(s => glitch(ctx, outs, t0 + s.start - .05));
 
   const stream = new MediaStream([...cv.captureStream(60).getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = ['video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
@@ -110,8 +115,8 @@ function play({ buffer, timeline, duration }) {
       const dt = cur >= 0 ? t - timeline[cur].start : 9;
       bg.u.glitch.value = Math.max(0, 1 - dt / .3);
       bg.u.t.value = t * 1.8; frame(t, { caps, timeline, style });
-      if (t < duration + .3) return requestAnimationFrame(loop);
-      stop(); rec.onstop = () => { EXP.forEach(b => enable($(b), true)); res(); };
+      if (t < duration) return requestAnimationFrame(loop);
+      rec.onstop = () => { EXP.forEach(b => enable($(b), true)); res(); };
       rec.stop(); status('CONCLUÍDO', 'bg-purple-500');
     };
     loop();
@@ -119,7 +124,7 @@ function play({ buffer, timeline, duration }) {
 }
 
 $('btn-export').onclick = () => chunks.length && download(new Blob(chunks, { type: 'video/webm' }), `SYNAPSE_${Date.now()}.webm`);
-$('btn-wav').onclick = () => track && download(toWav(track.buffer), `SYNAPSE_VOZ_${Date.now()}.wav`);
+$('btn-wav').onclick = () => mix && download(toWav(mix), `SYNAPSE_AUDIO_${Date.now()}.wav`);
 $('btn-srt').onclick = () => caps.length && download(new Blob([toSRT(caps)], { type: 'text/plain' }), `SYNAPSE_${Date.now()}.srt`);
 
 // --- Ilustrações ---
@@ -156,3 +161,40 @@ $('img-files').onchange = async e => {
 $('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
 // render determinístico por tempo (debug/export)
 window.synapse = { comp, get segs() { return segsCur; }, frame: t => (bg.u.t.value = t * 1.8, frame(t, { caps, timeline: track?.timeline || [], style: el.style.selectedIndex })), get duration() { return track?.duration || 0; } };
+
+// --- Trilha sonora ---
+$('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+const setMusic = m => {
+  music = m;
+  $('music-name').textContent = m ? '♪ ' + m.name : '♪ Procedural (gerada pelo estilo)';
+  $('music-clear').classList.toggle('hidden', !m);
+};
+$('music-clear').onclick = () => setMusic(null);
+$('music-file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { setMusic({ name: f.name, buf: await decodeAudio(f) }); } catch { alert('Formato de áudio não suportado.'); }
+  e.target.value = '';
+};
+$('music-search').onclick = async () => {
+  const box = $('music-results'), q = $('music-q').value.trim();
+  if (!q) return;
+  box.textContent = 'Buscando...';
+  try {
+    const rs = await searchAudio(q);
+    box.replaceChildren(...rs.map(x => {
+      const d = document.createElement('div');
+      d.className = 'flex items-center gap-2 bg-black/40 rounded px-2 py-1';
+      d.innerHTML = `<button class="text-emerald-400">▶</button><span class="flex-1 truncate" title="${x.credit.replace(/"/g, '')}">${x.title} <span class="text-zinc-600">${x.dur ? Math.round(x.dur) + 's' : ''}</span></span><button class="text-purple-400 font-bold">USAR</button>`;
+      const [pl, , us] = d.children, au = new Audio(x.url);
+      pl.onclick = () => au.paused ? (document.querySelectorAll('audio').forEach(a => a.pause()), au.play(), pl.textContent = '■') : (au.pause(), pl.textContent = '▶');
+      us.onclick = async () => {
+        us.textContent = '...';
+        try { setMusic({ name: x.credit, buf: await decodeAudio(x.url) }); us.textContent = '✓'; }
+        catch { us.textContent = 'USAR'; alert('Essa fonte bloqueia download direto (CORS). Baixe o arquivo e use "Enviar".'); }
+      };
+      return d;
+    }));
+    if (!rs.length) box.textContent = 'Nada encontrado.';
+  } catch (e) { box.textContent = 'Busca indisponível: ' + e.message; }
+};
+$('music-q').onkeydown = e => e.key === 'Enter' && $('music-search').click();

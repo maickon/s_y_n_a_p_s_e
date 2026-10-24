@@ -55,6 +55,21 @@
       <label class="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer"><input type="checkbox" id="img-search" checked class="accent-emerald-500"> Buscar imagens grátis p/ cenas sem imagem (Wikimedia + Openverse)</label>
       <label class="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer"><input type="checkbox" id="img-clip" class="accent-emerald-500"> Associação IA imagem↔frase (CLIP · ~90MB)</label>
     </div>
+    <div class="flex flex-col gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400">
+      <div class="flex justify-between items-center text-xs font-semibold">
+        <span class="flex items-center gap-2"><i data-lucide="music" class="w-4 h-4 text-purple-400"></i> Trilha Sonora</span>
+        <label class="text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"><i data-lucide="upload" class="w-3 h-3"></i> Enviar<input type="file" id="music-file" accept="audio/*" hidden></label>
+      </div>
+      <div class="flex items-center gap-2"><span id="music-name" class="flex-1 truncate text-emerald-300">♪ Procedural (gerada pelo estilo)</span><button id="music-clear" class="hidden text-red-400">✕</button></div>
+      <div class="flex gap-2"><input id="music-q" class="inp flex-1 !p-2 text-[11px]" placeholder="Buscar trilha grátis (Openverse): ambient, cyberpunk..."><button id="music-search" class="px-3 rounded bg-zinc-800 hover:bg-zinc-700"><i data-lucide="search" class="w-3 h-3"></i></button></div>
+      <div id="music-results" class="flex flex-col gap-1 max-h-32 overflow-y-auto"></div>
+      <label class="flex items-center justify-between gap-2">Ambiente <select id="amb-select" class="inp !p-1.5 !w-auto text-[11px]"></select></label>
+      <div class="grid grid-cols-3 gap-2">
+        <label>Música <input type="range" id="vol-music" min="0" max="100" value="60" class="w-full accent-purple-500"></label>
+        <label>Ambiente <input type="range" id="vol-amb" min="0" max="100" value="50" class="w-full accent-purple-500"></label>
+        <label>Efeitos <input type="range" id="vol-sfx" min="0" max="100" value="70" class="w-full accent-purple-500"></label>
+      </div>
+    </div>
     <label class="flex items-center gap-2 text-[11px] text-zinc-400 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 cursor-pointer">
       <input type="checkbox" id="ai-sync" class="accent-emerald-500"> <i data-lucide="captions" class="w-4 h-4 text-emerald-400"></i>
       Sincronia IA das legendas (Whisper · ~80MB no 1º uso, depois em cache)</label>
@@ -62,7 +77,7 @@
       <button id="btn-test" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="volume-2" class="w-4 h-4"></i> Testar Voz</button>
       <button id="btn-manifest" class="btn bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 text-white"><i data-lucide="play-circle" class="w-4 h-4"></i> Manifestar</button>
       <button id="btn-export" disabled class="btn bg-emerald-700 hover:bg-emerald-600 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> Vídeo WebM</button>
-      <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Voz WAV</button>
+      <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Áudio WAV</button>
       <button id="btn-srt" disabled class="btn col-span-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
     </div>
   </section>

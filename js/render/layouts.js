@@ -1,9 +1,9 @@
 import { Container, Sprite, Texture, Graphics } from 'pixi.js';
+import { rng } from '../core/script.js';
 import { GlitchFilter, RGBSplitFilter, ZoomBlurFilter, PixelateFilter, DropShadowFilter } from 'pixi-filters';
 
 export const W = 1280, H = 720, T = .7; // T = duração da transição
 export const cl = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - cl(x)) ** 3, io = x => (x = cl(x), x < .5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
-export const rng = s => () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
 
 const tc = new WeakMap(), bc = new WeakMap();
 const tex = im => tc.get(im) ?? (tc.set(im, Texture.from(im)), tc.get(im));
