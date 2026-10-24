@@ -10,7 +10,9 @@ import { loadTTS } from './tts/mespeak.js';
 import { transcribe } from './ai/whisper.js';
 import { align, groups, toSRT } from './core/words.js';
 import { createCompositor } from './render/compositor.js';
-import { assets, addAsset, removeAsset, parseUrls, plan, segments } from './core/assets.js';
+import { direct, INTRO } from './core/direct.js';
+import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
+import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -23,7 +25,7 @@ const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-s
 const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt'];
-let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false;
+let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
 const count = () => $('char-count').textContent = `${el.txt.value.length} caracteres`;
@@ -40,7 +42,7 @@ loadTTS().then(() => status('MOTOR DE VOZ PRONTO', 'bg-emerald-500')).catch(e =>
 
 async function makeTrack(scenes) {
   return buildVoiceTrack(scenes, {
-    preset: el.voice.value, pitch: +el.pitch.value, speed: +el.rate.value,
+    preset: el.voice.value, pitch: +el.pitch.value, speed: +el.rate.value, lead: scenes.length > 1 ? INTRO : .3,
     onProgress: (i, n) => status(`SINTETIZANDO VOZ ${i + 1}/${n}`, 'bg-yellow-400 animate-pulse')
   });
 }
@@ -57,12 +59,30 @@ $('btn-test').onclick = async () => {
   busy = false;
 };
 
-$('btn-manifest').onclick = async () => {
+const v = id => $(id).value / 100;
+async function run(fn) {
   if (busy) return;
+  busy = true; ['btn-manifest', 'btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), false));
+  try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
+  busy = false; enable($('btn-manifest'), true);
+  if (mix) ['btn-vary', 'btn-apply'].forEach(b => enable($(b), true));
+}
+
+// edição -> mix -> reprodução/gravação
+async function render() {
+  dir = direct(track.timeline, P, { variation, ov, title: $('video-title').value.trim(), credits: ['Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')] });
+  comp.load(segsCur = dir.segs);
+  status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
+  mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
+    musicBuf: music?.buf, amb: $('amb-select').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+  grid(P); editor();
+  await play(track.timeline, mix.duration);
+}
+
+$('btn-manifest').onclick = () => {
   const scenes = splitScenes(el.txt.value);
   if (!scenes.length) return alert('Digite um roteiro válido.');
-  busy = true; enable($('btn-manifest'), false); EXP.forEach(b => enable($(b), false));
-  try {
+  run(async () => {
     track = await makeTrack(scenes);
     if ($('ai-sync').checked) try {
       status('WHISPER: CARREGANDO...', 'bg-yellow-400 animate-pulse');
@@ -72,20 +92,15 @@ $('btn-manifest').onclick = async () => {
     } catch (e) { console.warn('Whisper indisponível, usando estimativa', e); }
     caps = groups(track.timeline);
     await syncUrls();
-    const P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
-    comp.load(segsCur = segments(track.timeline, P, track.duration));
-    status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
-    const v = id => $(id).value / 100;
-    mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: track.duration, style: el.style.selectedIndex, seed: hash(el.txt.value),
-      musicBuf: music?.buf, amb: $('amb-select').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
-    track.duration = mix.duration;
-    grid(P);
-    await play(track);
-  } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
-  busy = false; enable($('btn-manifest'), true);
+    P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
+    variation = 0; ov = [];
+    await render();
+  });
 };
+$('btn-vary').onclick = () => track && run(() => (variation++, render()));
+$('btn-apply').onclick = () => track && run(render);
 
-function play({ timeline, duration }) {
+function play(timeline, duration) {
   ctx ??= new AudioContext();
   ctx.resume();
   const dest = ctx.createMediaStreamDestination(), style = el.style.selectedIndex;
@@ -114,7 +129,7 @@ function play({ timeline, duration }) {
       }
       const dt = cur >= 0 ? t - timeline[cur].start : 9;
       bg.u.glitch.value = Math.max(0, 1 - dt / .3);
-      bg.u.t.value = t * 1.8; frame(t, { caps, timeline, style });
+      bg.u.t.value = t * 1.8; frame(t, { caps, timeline, style, dir });
       if (t < duration) return requestAnimationFrame(loop);
       rec.onstop = () => { EXP.forEach(b => enable($(b), true)); res(); };
       rec.stop(); status('CONCLUÍDO', 'bg-purple-500');
@@ -160,7 +175,7 @@ $('img-files').onchange = async e => {
 };
 $('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
 // render determinístico por tempo (debug/export)
-window.synapse = { comp, get segs() { return segsCur; }, frame: t => (bg.u.t.value = t * 1.8, frame(t, { caps, timeline: track?.timeline || [], style: el.style.selectedIndex })), get duration() { return track?.duration || 0; } };
+window.synapse = { comp, get segs() { return segsCur; }, frame: t => (bg.u.t.value = t * 1.8, frame(t, { caps, dir, timeline: track?.timeline || [], style: el.style.selectedIndex })), get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -198,3 +213,21 @@ $('music-search').onclick = async () => {
   } catch (e) { box.textContent = 'Busca indisponível: ' + e.message; }
 };
 $('music-q').onkeydown = e => e.key === 'Enter' && $('music-search').click();
+
+// --- Editor de cenas ---
+const LN = { full: 'Tela cheia', frame: 'Moldura', split: 'Dividida', double: 'Dupla exp.', circle: 'Círculo' }, TNm = { fade: 'Fade', glitch: 'Glitch', zoom: 'Zoom', pixel: 'Pixel', wipe: 'Wipe', slide: 'Slide' };
+const opts = (list, names, cur, auto) => `<option value="">Auto${auto ? ' (' + names[auto] + ')' : ''}</option>` + list.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${names[k]}</option>`).join('');
+function editor() {
+  const sel = 'bg-zinc-900 border border-zinc-800 rounded p-1 w-full';
+  $('scene-list').replaceChildren(...track.timeline.map((s, i) => {
+    const o = ov[i] || {}, sg = segsCur.find(x => x.scene === i), d = document.createElement('div');
+    d.className = 'grid grid-cols-12 gap-1 items-center bg-black/30 rounded p-1';
+    const imgs = Object.fromEntries(assets.map((a, k) => [k, `${k + 1}. ${(a.tag || a.origin).slice(0, 14)}`]));
+    d.innerHTML = `<span class="col-span-1 text-purple-400 text-center">${i + 1}</span><span class="col-span-5 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
+      <select data-k="layout" class="col-span-2 ${sel}">${opts(LAYOUT_NAMES, LN, o.layout, !o.layout && sg?.layout)}</select>
+      <select data-k="trans" class="col-span-2 ${sel}">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select>
+      <select data-k="img" class="col-span-2 ${sel}">${opts(Object.keys(imgs), imgs, o.img ? String(assets.indexOf(o.img)) : '', '')}</select>`;
+    d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value }; });
+    return d;
+  }));
+}

@@ -2,6 +2,7 @@ import { Application, Container, Sprite, Texture } from 'pixi.js';
 import { RGBSplitFilter, GlitchFilter, CRTFilter } from 'pixi-filters';
 import { build, prepare, W, H, T, cl, ease } from './layouts.js';
 import { drawCaptions } from './captions.js';
+import { drawIntro, drawOutro, drawKinetic } from './titles.js';
 
 export async function createCompositor(canvas, bgCanvas) {
   const app = new Application();
@@ -15,7 +16,7 @@ export async function createCompositor(canvas, bgCanvas) {
 
   return {
     load(s) { live.forEach(x => x.c.destroy({ children: true })); live = new Map(); segs = s; prepare(segs); },
-    render(t, { caps = [], timeline = [], style = 0 } = {}) {
+    render(t, { caps = [], timeline = [], style = 0, dir = {} } = {}) {
       bgT.source.update();
       // segmentos ativos (o anterior fica por baixo durante a transição)
       segs.forEach((s, i) => {
@@ -35,7 +36,7 @@ export async function createCompositor(canvas, bgCanvas) {
       const cs = segs.find(s => t >= s.a && t < s.b)?.credit;
       if (segs.some(s => t >= s.a && t < s.b + T)) { const gr = g.createLinearGradient(0, H * .55, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = gr; g.fillRect(0, H * .55, W, H * .45); }
       if (cs) { g.font = '13px "Fira Code", monospace'; g.fillStyle = 'rgba(255,255,255,.55)'; g.textAlign = 'right'; g.fillText(cs.slice(0, 80), W - 18, 28); }
-      drawCaptions(g, caps, t, W, H);
+      drawKinetic(g, t, dir.kin, segs); drawCaptions(g, caps, t, W, H); drawIntro(g, t, dir.intro); drawOutro(g, t, dir.outro);
       capT.source.update();
       app.renderer.render(app.stage);
     }

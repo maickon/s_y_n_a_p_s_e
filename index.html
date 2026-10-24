@@ -93,6 +93,16 @@
       <span>Cena: <strong id="scene-counter" class="text-zinc-200">0/0</strong> · 1280x720</span>
       <span class="flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i> eSpeak · Whisper · PixiJS · WebAudio · 100% Client-Side</span>
     </div>
+    <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-col gap-3">
+      <div class="flex flex-wrap gap-2 items-center">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="clapperboard" class="w-4 h-4"></i> Direção</h2>
+        <input id="video-title" class="inp flex-1 min-w-[160px] !p-2 text-xs" placeholder="Título do vídeo (opcional)">
+        <button id="btn-vary" disabled class="btn !py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="shuffle" class="w-4 h-4"></i> Variar</button>
+        <button id="btn-apply" disabled class="btn !py-2 bg-purple-800 hover:bg-purple-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Aplicar edições</button>
+      </div>
+      <div class="grid grid-cols-12 gap-1 text-[10px] uppercase text-zinc-500 px-1"><span class="col-span-1 text-center">#</span><span class="col-span-5">Cena</span><span class="col-span-2">Layout</span><span class="col-span-2">Transição</span><span class="col-span-2">Imagem</span></div>
+      <div id="scene-list" class="flex flex-col gap-1 max-h-72 overflow-y-auto text-[11px]"><span class="text-zinc-600 p-2">Manifeste um roteiro para editar as cenas.</span></div>
+    </div>
   </section>
 </main>
 <footer class="border-t border-zinc-900 bg-black/40 p-3 text-center text-xs text-zinc-600">S.Y.N.A.P.S.E © 2026 · Processamento local.</footer>

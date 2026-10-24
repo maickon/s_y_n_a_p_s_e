@@ -92,14 +92,15 @@ const pick = (r, w) => { let x = r() * Object.values(w).reduce((a, b) => a + b);
 // escolhe layout/transição sem repetir o anterior
 export function prepare(segs) {
   segs.forEach((s, i) => {
-    if (s.layout) return;
     const r = rng(s.seed + 1), pv = segs[i - 1];
     let L = pick(r, LW), t = TN[r() * TN.length | 0];
     if (pv && L === pv.layout) L = pick(r, { ...LW, [L]: 0 });
     if (pv && t === pv.trans) t = TN[(TN.indexOf(t) + 1) % TN.length];
-    Object.assign(s, { layout: L, trans: t, r: { zin: r() > .5, dx: r() > .5 ? 1 : -1, dy: r() > .5 ? 1 : -1, rot: r() > .5 ? 1 : -1, side: r() > .5 } });
+    Object.assign(s, { layout: s.layout || L, trans: s.trans || t, r: { zin: r() > .5, dx: r() > .5 ? 1 : -1, dy: r() > .5 ? 1 : -1, rot: r() > .5 ? 1 : -1, side: r() > .5 } });
   });
 }
+
+export const LAYOUT_NAMES = Object.keys(LW), TRANS_NAMES = TN;
 
 export function build(s) {
   const o = new Container(), c = new Container();

@@ -3,7 +3,6 @@ import { searchImages } from '../media/search.js';
 import { keywords } from './keywords.js';
 import { norm } from './words.js';
 import { clipMatrix } from '../ai/clip.js';
-import { hash } from './script.js';
 
 export const assets = []; // {id, src, img, tag, credit, origin}
 
@@ -58,12 +57,4 @@ export async function plan(tl, { search, clip, onStatus }) {
   // 3) cenas ainda vazias reaproveitam imagens (rodízio)
   if (E.length > free.length) E.forEach((i, k) => P[i].length || P[i].push(free[k % free.length]));
   return P;
-}
-
-// segmentos de tempo por imagem
-export function segments(tl, P, dur) {
-  return tl.flatMap((s, i) => {
-    const a = Math.max(0, s.start - .35), b = (tl[i + 1]?.start ?? dur + .35) - .35, n = P[i].length, d = (b - a) / n;
-    return P[i].map((x, k) => ({ img: x.img, credit: x.credit, a: a + k * d, b: a + (k + 1) * d, seed: hash(s.text) + k * 7919 }));
-  });
 }

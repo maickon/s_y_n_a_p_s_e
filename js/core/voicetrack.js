@@ -3,15 +3,15 @@ import { applyFx, VOICES } from '../audio/fx.js';
 import { estimate } from './words.js';
 
 // Gera a trilha de voz (com FX e seca) + tempos de cena/palavra
-export async function buildVoiceTrack(scenes, { preset, pitch, speed, gap = .45, onProgress }) {
+export async function buildVoiceTrack(scenes, { preset, pitch, speed, gap = .45, lead = .3, onProgress }) {
   const P = VOICES[preset], bufs = [];
   for (const [i, s] of scenes.entries()) {
     onProgress?.(i, scenes.length);
     const dry = await speak(s, { variant: P.v, pitch: Math.max(0, pitch + (P.p || 0)), speed });
     bufs.push([await applyFx(dry, P.fx), dry]);
   }
-  const sr = bufs[0][0].sampleRate, G = Math.round(gap * sr), lead = Math.round(.3 * sr);
-  let o = lead;
+  const sr = bufs[0][0].sampleRate, G = Math.round(gap * sr), L = Math.round(lead * sr);
+  let o = L;
   const pos = bufs.map(([, d]) => (o += d.length + G) - d.length - G);
   const len = Math.max(...bufs.map(([b], i) => pos[i] + b.length));
   const mk = () => new AudioBuffer({ length: len, sampleRate: sr, numberOfChannels: 1 });
