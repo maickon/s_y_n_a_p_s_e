@@ -3,7 +3,7 @@
 Gerador de vídeo procedural 100% client-side (GitHub Pages). Texto → voz sintética → cenas → vídeo.
 
 ## Status
-- [x] Etapa 1: estrutura modular + TTS eSpeak (meSpeak via CDN) com presets robóticos + export WebM/WAV
+- [x] Etapa 1: estrutura modular + TTS (Piper pt-BR, eSpeak, Kokoro EN) com 13 efeitos de voz (WSOLA pitch/tempo) + export WAV
 - [x] Etapa 2: legendas karaokê no canvas (estimativa silábica + Whisper opcional) + SRT
 - [x] Etapa 3: imagens (URL `palavra | url`, upload, busca Wikimedia+Openverse, proxy CORS wsrv.nl, CLIP opcional)
 - [x] Etapa 4: compositor PixiJS (5 layouts, 6 transições, glitch/RGB split nas trocas, CRT)

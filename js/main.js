@@ -1,6 +1,7 @@
 import { splitScenes, hash } from './core/script.js';
 import { buildVoiceTrack } from './core/voicetrack.js';
-import { VOICES } from './audio/fx.js';
+import { EFFECTS } from './audio/fx.js';
+import { VOICES } from './tts/index.js';
 import { toWav } from './audio/wav.js';
 import { mixdown } from './audio/mix.js';
 import { AMBS } from './audio/ambience.js';
@@ -35,7 +36,9 @@ const count = () => $('char-count').textContent = `${el.txt.value.length} caract
 const enable = (b, on) => { b.disabled = !on; b.classList.toggle('opacity-40', !on); b.classList.toggle('cursor-not-allowed', !on); };
 const download = (blob, name) => { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e3); };
 
-el.voice.innerHTML = Object.entries(VOICES).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
+el.voice.innerHTML = Object.entries(VOICES).map(([g, vs]) => `<optgroup label="${g}">${Object.entries(vs).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</optgroup>`).join('');
+$('effect-select').innerHTML = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
+el.voice.value = 'piper:pt_BR-faber-medium'; $('effect-select').value = 'star';
 el.txt.value = PRESET; count();
 el.txt.oninput = count;
 $('btn-preset').onclick = () => { el.txt.value = PRESET; count(); };
@@ -43,11 +46,15 @@ for (const k of ['pitch', 'rate']) el[k].oninput = () => $(`${k}-val`).textConte
 frame(0);
 loadTTS().then(() => status('MOTOR DE VOZ PRONTO', 'bg-emerald-500')).catch(e => status('ERRO AO CARREGAR VOZ', 'bg-red-500'));
 
+let warned = false;
 async function makeTrack(scenes) {
-  return buildVoiceTrack(scenes, {
-    preset: el.voice.value, pitch: +el.pitch.value, speed: +el.rate.value, lead: scenes.length > 1 ? INTRO : .3,
+  const t = await buildVoiceTrack(scenes, {
+    voice: el.voice.value, effect: $('effect-select').value, tom: +el.pitch.value, speed: +el.rate.value, lead: scenes.length > 1 ? INTRO : .3,
+    onDownload: e => e?.total && status(`BAIXANDO MODELO DE VOZ ${e.loaded / e.total * 100 | 0}%`, 'bg-yellow-400 animate-pulse'),
     onProgress: (i, n) => status(`SINTETIZANDO VOZ ${i + 1}/${n}`, 'bg-yellow-400 animate-pulse')
   });
+  if (t.fallback && !warned) { warned = true; alert('Não foi possível carregar a voz escolhida (rede/modelo). Usando eSpeak como alternativa.'); }
+  return t;
 }
 
 $('btn-test').onclick = async () => {
@@ -119,7 +126,7 @@ async function flush() {
   });
 }
 const on = (ids, ev, lv) => ids.split(' ').forEach(id => $(id).addEventListener(ev, () => live(lv)));
-on('voice-select voice-pitch voice-rate', 'change', 4);
+on('voice-select effect-select voice-pitch voice-rate', 'change', 4);
 on('img-search img-clip', 'change', 3);
 on('video-title', 'input', 2);
 on('style-select amb-select vol-music vol-amb vol-sfx', 'change', 1);

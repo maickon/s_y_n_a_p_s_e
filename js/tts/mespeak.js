@@ -1,8 +1,8 @@
 import { CDN } from '../cdn.js';
+import { decode } from '../audio/util.js';
 
 const get = (u, t = 'text') => fetch(u).then(r => { if (!r.ok) throw Error(`Falha: ${u}`); return r[t](); });
 const cjs = (code, req) => { const m = { exports: {} }; Function('module', 'exports', 'require', code)(m, m.exports, req); return m.exports; };
-const dec = new OfflineAudioContext(1, 1, 44100);
 let p;
 
 export const loadTTS = () => p ??= (async () => {
@@ -18,5 +18,5 @@ export async function speak(text, { variant = '', pitch = 50, speed = 160, gap =
   const ms = await loadTTS();
   const ab = ms.speak(text, { voice: 'pt', rawdata: 'arraybuffer', variant, pitch, speed, wordgap: gap, amplitude: 120 });
   if (!ab) throw Error('TTS falhou');
-  return dec.decodeAudioData(ab);
+  return decode(ab);
 }
