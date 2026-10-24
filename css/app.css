@@ -41,3 +41,14 @@ body{font-family:'Fira Code',monospace;background:#050508;color:#d1d5db;overflow
 .tl-head::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top-color:#f43f5e}
 .tile{position:relative;aspect-ratio:16/9;border-radius:.4rem;overflow:hidden;border:1px solid #3f3f46;cursor:pointer;background:#18181b center/cover}
 .tile.on{border:2px solid #34d399}.tile:hover{border-color:#a855f7}
+
+/* galerias de prévia */
+.gal{display:flex;flex-direction:column;gap:3px;overflow-y:auto;padding-right:2px}
+.gal-g{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#71717a;margin:6px 0 2px}
+.gi{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;background:#18181b;border:1px solid transparent;cursor:pointer;color:#d4d4d8}
+.gi:hover{border-color:#3f3f46}.gi.on{border-color:#34d399;background:rgba(16,185,129,.1);color:#fff}.gi small{color:#71717a;font-size:9px}
+.gplay{width:24px;height:24px;flex:none;border-radius:50%;background:#7e22ce;display:flex;align-items:center;justify-content:center}
+.gplay::before{content:"";border-left:8px solid #fff;border-top:5px solid transparent;border-bottom:5px solid transparent;margin-left:2px}
+.gplay:hover{background:#9333ea}.gplay.playing{background:#059669}.gplay.playing::before{border:0;width:8px;height:8px;background:#fff;margin:0}
+.gplay.loading::before{border:2px solid #fff;border-top-color:transparent;border-radius:50%;width:12px;height:12px;margin:0;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

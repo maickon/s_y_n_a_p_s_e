@@ -43,8 +43,10 @@
       </section>
       <section data-pane="voice" class="pane hidden flex-col gap-3">
         <h2 class="pane-h"><i data-lucide="mic" class="w-4 h-4"></i> Voz</h2>
-        <label class="fl">Voz<select id="voice-select" data-persist class="inp"></select></label>
-        <label class="fl">Efeito<select id="effect-select" data-persist class="inp"></select></label>
+        <select id="voice-select" data-persist class="hidden"></select><select id="effect-select" data-persist class="hidden"></select>
+        <div class="flex gap-2"><input id="test-phrase" data-persist class="inp flex-1 !p-2 text-[11px]" placeholder="Frase de teste (vazio = frases internas)"><button id="phrase-rand" class="pbtn bg-zinc-800" title="Outra frase">🎲</button></div>
+        <div class="fl">Voz <span class="text-zinc-600">▶ ouvir · clique para usar</span><div id="voice-gal" class="gal max-h-64"></div></div>
+        <div class="fl">Efeito<div id="effect-gal" class="gal max-h-48"></div></div>
         <div class="grid grid-cols-2 gap-3">
           <label>Tom <span id="pitch-val" class="val">0</span><input type="range" id="voice-pitch" data-persist min="-12" max="12" value="0"></label>
           <label>Velocidade <span id="rate-val" class="val">1</span><input type="range" id="voice-rate" data-persist min="0.6" max="1.6" step="0.05" value="1"></label>
@@ -61,12 +63,15 @@
       </section>
       <section data-pane="audio" class="pane hidden flex-col gap-3">
         <h2 class="pane-h"><i data-lucide="music" class="w-4 h-4"></i> Áudio</h2>
-        <div class="flex items-center gap-2 bg-black/40 rounded-lg p-2"><span id="music-name" class="flex-1 truncate text-emerald-300">♪ Procedural (gerada pelo estilo)</span><button id="music-clear" class="hidden text-red-400">✕</button></div>
+        <div class="flex items-center gap-2 bg-black/40 rounded-lg p-2"><button id="music-play" class="gplay" title="Ouvir trilha atual"></button><span id="music-name" class="flex-1 truncate text-emerald-300">♪ Procedural (gerada pelo estilo)</span><button id="music-clear" class="hidden text-red-400">✕</button></div>
+        <select id="music-prof" data-persist class="hidden"></select>
+        <div class="fl">Trilha procedural<div id="prof-gal" class="gal"></div></div>
         <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Enviar música<input type="file" id="music-file" accept="audio/*" hidden></label>
         <div class="flex gap-2"><input id="music-q" class="inp flex-1 !p-2 text-[11px]" placeholder="Buscar trilha grátis (Openverse)"><button id="music-search" class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700"><i data-lucide="search" class="w-3 h-3"></i></button></div>
         <div id="music-results" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div>
-        <label class="fl">Ambiente<select id="amb-select" data-persist class="inp"></select></label>
-        <label class="fl">Efeitos sonoros<select id="sfx-pack" data-persist class="inp"></select></label>
+        <select id="amb-select" data-persist class="hidden"></select><select id="sfx-pack" data-persist class="hidden"></select>
+        <div class="fl">Ambiente<div id="amb-gal" class="gal"></div></div>
+        <div class="fl">Efeitos sonoros<div id="sfx-gal" class="gal"></div></div>
         <label>Música <input type="range" id="vol-music" data-persist min="0" max="100" value="60"></label>
         <label>Ambiente <input type="range" id="vol-amb" data-persist min="0" max="100" value="50"></label>
         <label>Efeitos <input type="range" id="vol-sfx" data-persist min="0" max="100" value="70"></label>

@@ -1,7 +1,9 @@
 import { splitScenes, hash } from './core/script.js';
 import { buildVoiceTrack } from './core/voicetrack.js';
-import { EFFECTS } from './audio/fx.js';
-import { VOICES } from './tts/index.js';
+import { EFFECTS, applyFx } from './audio/fx.js';
+import { VOICES, synth } from './tts/index.js';
+import { audition, gallery, stop as stopAud, hooks as audHooks } from './ui/audition.js';
+import { PROFILES, previewMusic, previewAmb, previewPack, previewSting, clip } from './audio/preview.js';
 import { toWav } from './audio/wav.js';
 import { mixdown } from './audio/mix.js';
 import { AMBS } from './audio/ambience.js';
@@ -65,17 +67,6 @@ async function makeTrack(scenes) {
   return t;
 }
 
-$('btn-test').onclick = async () => {
-  if (busy) return;
-  busy = true;
-  try {
-    ctx ??= new AudioContext();
-    const { buffer } = await makeTrack([splitScenes(el.txt.value)[0] || 'Teste de voz.']);
-    const s = new AudioBufferSourceNode(ctx, { buffer }); s.connect(ctx.destination); s.start();
-    status('TESTE DE VOZ', 'bg-purple-500');
-  } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
-  busy = false;
-};
 
 const v = id => $(id).value / 100;
 async function run(fn) {
@@ -97,7 +88,7 @@ async function render() {
   comp.load(segsCur = dir.segs);
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
-    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
@@ -144,7 +135,7 @@ on('img-search img-clip', 'change', 3);
 on('video-title outro-title outro-lines', 'input', 2);
 on('outro-on outro-auto', 'change', 2);
 on('style-select grade-select', 'change', 2);
-on('amb-select sfx-pack vol-music vol-amb vol-sfx', 'change', 1);
+on('amb-select sfx-pack music-prof vol-music vol-amb vol-sfx', 'change', 1);
 
 // quadro determinístico no tempo t (preview e export)
 function drawAt(t) {
@@ -246,7 +237,7 @@ function marks() {
   $('pl-seek').max = D;
   $('pl-marks').innerHTML = track.timeline.map((s, i) => `<span title="Cena ${i + 1}" style="left:${s.start / D * 100}%" class="absolute top-0 w-px h-2 bg-purple-400"></span>`).join('');
 }
-$('pl-play').onclick = () => { follow = true; pl.toggle(); };
+$('pl-play').onclick = () => { follow = true; stopAud(); pl.toggle(); };
 $('pl-back').onclick = () => pl.seek(pl.time - 5);
 $('pl-fwd').onclick = () => pl.seek(pl.time + 5);
 $('pl-seek').oninput = e => pl.seek(+e.target.value);
@@ -416,8 +407,44 @@ $('vig-prev').onclick = () => {
   const ic = introCfg(), t0 = performance.now(), d = { intro: { title: ($('video-title').value || 'S.Y.N.A.P.S.E').toUpperCase(), b: ic.dur + .2, code: 7, vig: ic.vig, none: ic.dur < .5 } };
   const loop = () => { const t = (performance.now() - t0) / 1e3; frame(t, { dir: d, tx: TX, style: el.style.selectedIndex }); if (t < ic.dur + .3) requestAnimationFrame(loop); };
   loop();
+  const k = ic.vig && (ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd);
+  if (k && k !== 'none') previewSting(k, ic.dur).then(b => audition(b));
 };
 vigUI();
+
+// --- Prévias rápidas (vozes, efeitos, trilhas, ambientes, efeitos sonoros) ---
+const PHRASES = ['Saudações, habitantes da Terra. Esta é uma transmissão de teste.', 'A realidade é apenas uma simulação em baixa resolução.', 'Sinal recebido. Iniciando protocolo de contato com a sua civilização.', 'Bem-vindos ao arquivo secreto do universo.', 'O tempo dobrou sobre si mesmo no limiar do abismo.'];
+let phr = 0;
+const vcache = new Map(), phrase = v => v.startsWith('kokoro') ? 'Greetings, people of Earth. This is a test transmission from beyond the stars.' : ($('test-phrase').value.trim() || PHRASES[phr % PHRASES.length]);
+function voiceSample(voice = el.voice.value, effect = $('effect-select').value) {
+  const txt = phrase(voice), key = [voice, effect, el.pitch.value, el.rate.value, txt].join('|');
+  if (!vcache.has(key)) vcache.set(key, synth(txt, voice, +el.rate.value, e => e?.total && status(`BAIXANDO VOZ ${e.loaded / e.total * 100 | 0}%`, 'bg-yellow-400 animate-pulse')).then(r => {
+    if (r.fallback && !warned) { warned = true; warn('Não foi possível carregar essa voz (rede ou modelo indisponível).\nTocando com eSpeak.'); }
+    status('VOZ PRONTA', 'bg-emerald-500');
+    return applyFx(r.buf, EFFECTS[effect].fx, +el.pitch.value, r.native ? 1 : +el.rate.value);
+  }).catch(e => { vcache.delete(key); throw e; }));
+  return vcache.get(key);
+}
+audHooks.onStart = () => pl.playing && pl.pause();
+const pick = id => k => { $(id).value = k; $(id).dispatchEvent(new Event('change', { bubbles: true })); };
+$('music-prof').innerHTML = '<option value="auto">auto</option>' + PROFILES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+const G = {};
+function galleries() {
+  const sty = () => STYLES[el.style.selectedIndex];
+  G.voice = gallery($('voice-gal'), { items: Object.entries(VOICES).flatMap(([g, vs]) => Object.entries(vs).map(([key, label]) => ({ key, label, group: g }))), value: el.voice.value, onPick: pick('voice-select'), render: k => voiceSample(k) });
+  G.effect = gallery($('effect-gal'), { items: Object.entries(EFFECTS).map(([key, v]) => ({ key, label: v.n })), value: $('effect-select').value, onPick: pick('effect-select'), render: k => voiceSample(el.voice.value, k) });
+  G.prof = gallery($('prof-gal'), { items: [{ key: 'auto', label: 'Automática (pelo estilo)' }, ...PROFILES.map((label, i) => ({ key: String(i), label }))], value: $('music-prof').value,
+    onPick: k => { if (music) setMusic(null); pick('music-prof')(k); }, render: k => previewMusic(k === 'auto' ? sty().mus : +k) });
+  G.amb = gallery($('amb-gal'), { items: Object.entries(AMBS).map(([key, label]) => ({ key, label })), value: $('amb-select').value, onPick: pick('amb-select'), render: k => previewAmb(k === 'auto' ? sty().amb : k) });
+  G.sfx = gallery($('sfx-gal'), { items: [{ key: 'auto', label: 'Automático (pelo estilo)' }, ...Object.entries(PACKS).map(([key, v]) => ({ key, label: v.n }))], value: $('sfx-pack').value, onPick: pick('sfx-pack'), render: k => previewPack(k === 'auto' ? sty().sfx : k) });
+}
+$('phrase-rand').onclick = () => { phr++; $('test-phrase').value = ''; $('test-phrase').placeholder = PHRASES[phr % PHRASES.length]; };
+$('btn-test').onclick = async () => { const b = $('btn-test'); b.classList.add('opacity-60'); try { audition(await voiceSample(), b); } finally { b.classList.remove('opacity-60'); } };
+$('music-play').onclick = async () => {
+  const b = $('music-play'); if (b.classList.contains('playing')) return stopAud();
+  b.classList.add('loading');
+  try { audition(music?.buf ? clip(music.buf) : await previewMusic($('music-prof').value === 'auto' ? STYLES[el.style.selectedIndex].mus : +$('music-prof').value), b); } finally { b.classList.remove('loading'); }
+};
 
 // --- Abas do painel, menu de exportação, prévia automática ---
 const showTab = k => { document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === k)); document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === k)); store.set('tab', k); };
@@ -435,6 +462,7 @@ const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '')
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
 await store.bindForm(() => {
   vigUI(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+galleries();
 await setWm(await store.get('wm')).catch(() => { });
 readText();
 for (const f of await store.get('imgs') || []) await addFile(f);
