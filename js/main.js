@@ -24,6 +24,7 @@ import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
+import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
 import { warn, ask, progress } from './ui/modal.js';
 import * as store from './core/store.js';
 
@@ -327,7 +328,7 @@ function inspector() {
   b.querySelectorAll('[data-img]').forEach(x => x.onclick = () => { set('img', x.dataset.img === '' ? undefined : assets[x.dataset.img]); b.querySelectorAll('[data-img]').forEach(y => y.classList.toggle('on', y === x)); });
   b.querySelectorAll('[data-nav]').forEach(x => x.onclick = () => selectScene(i + +x.dataset.nav, true));
   b.querySelector('[data-go]').onclick = () => selectScene(i, true);
-  lucide.createIcons({ root: b });
+  lucide.createIcons({ root: b }); enhanceSelects(b);
 }
 const tl = createTimeline($('tl-inner'), $('tl-scroll'), { onSeek: t => pl.seek(t), onSelect: i => selectScene(i) });
 $('tl-zoom').oninput = e => tl.setZoom(+e.target.value);
@@ -380,7 +381,7 @@ function vigUI() {
   if (!v) return;
   vEdit = v.id; $('vig-edit').value = v.id;
   for (const k of ['name', 'sub', 'dur', 'tpl', 'snd']) $('vig-' + k).value = v[k] ?? '';
-  $('vig-dur-v').textContent = v.dur + 's';
+  $('vig-dur-v').textContent = v.dur + 's'; refreshRanges($('vig-form'));
   $('vig-thumb').classList.toggle('hidden', !v.img); $('vig-img-x').classList.toggle('hidden', !v.img);
   if (v.img) $('vig-thumb').src = vimg[v.id]?.src || '';
 }
@@ -461,8 +462,8 @@ el.txt.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey ||
 const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
 await store.bindForm(() => {
-  vigUI(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
-galleries();
+  vigUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+galleries(); enhance(); tooltips();
 await setWm(await store.get('wm')).catch(() => { });
 readText();
 for (const f of await store.get('imgs') || []) await addFile(f);
