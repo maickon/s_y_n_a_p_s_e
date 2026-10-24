@@ -22,7 +22,7 @@ export async function open(id) {
   await store.set('curProject', id); location.reload();
 }
 export async function create() { for (const k of WS) await store.del(k); await store.set('curProject', newId()); location.reload(); }
-export async function remove(id) { await store.del('proj:' + id); await saveList((await list()).filter(p => p.id !== id)); }
+export async function remove(id) { await store.del('proj:' + id); await store.del('mix:' + id); await saveList((await list()).filter(p => p.id !== id)); }
 export async function rename(id, name) { const l = await list(), p = l.find(x => x.id === id); if (p) { p.name = name; p.renamed = true; await saveList(l); } }
 export async function duplicate(id) {
   const n = newId(), l = await list(), p = l.find(x => x.id === id);

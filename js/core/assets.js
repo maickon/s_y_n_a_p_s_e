@@ -44,6 +44,8 @@ export async function plan(tl, { search, clip, onStatus, ar = 16 / 9, queries = 
   const P = tl.map(() => []), used = new Set(), topic = topicOf(tl);
   for (const a of assets) if (a.tag && a.origin !== 'search') tl.forEach((s, i) => hit(a.tag, s.text) && (P[i].push(a), used.add(a)));
 
+  // busca todas as cenas em paralelo; a escolha (sem repetir imagem) é sequencial
+  if (search) { let k = 0; await Promise.all(tl.map((s, i) => !P[i].length && searchScene(i, queries[i] || autoQuery(s.text), topic, ar).finally(() => onStatus?.(`BUSCANDO IMAGENS ${++k}/${tl.length}`)))); }
   if (search) for (const [i, s] of tl.entries()) {
     if (P[i].length) continue;
     onStatus?.(`BUSCANDO IMAGENS ${i + 1}/${tl.length}`);

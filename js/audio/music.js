@@ -13,6 +13,9 @@ const STY = [
   { bpm: 108, root: 45, sc: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 3, 4], drums: 'synth', arp: 'sawtooth', pad: 'sawtooth', lp: 1800, bass: 'sawtooth', bass8: 1 } // synthwave
 ];
 
+// duração de um loop musical (compassos inteiros, ≥ 40 s)
+export const loopLen = prof => { const bpm = (STY[prof] || STY[0]).bpm, bar = 240 / bpm; return Math.max(16, Math.ceil(40 / bar / 4) * 4) * bar; };
+
 export function music(ctx, out, dur, prof, seed) {
   const S = STY[prof] || STY[0], r = rng(seed), bt = 60 / S.bpm, bar = bt * 4, L = S.sc.length;
   const chord = d => [0, 2, 4].map(i => S.root + S.sc[(d + i) % L] + 12 * Math.floor((d + i) / L));
@@ -38,7 +41,7 @@ export function music(ctx, out, dur, prof, seed) {
       if (D === 'techno') burst(ctx, out, { t: x, len: .03, vol: .06, type: 'highpass', f: 9000 });
     }
   }
-  tone(ctx, out, { f: N(S.root - 24), t: 0, len: dur, vol: .12, a: 2, s: 1, d: 1, r: 1.5 });
+  tone(ctx, out, { f: N(S.root - 24), t: 0, len: dur, vol: .12, a: .05, s: 1, d: 1, r: .05 }); // contínuo no loop
 }
 
 function kick(ctx, out, t) { const o = tone(ctx, out, { f: 150, t, len: .4, vol: .6, d: .35 }); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + .12); }

@@ -46,6 +46,41 @@ export const PACKS = {
 };
 const HARSH = new Set(['zap', 'stutter', 'dataChirp', 'clang', 'hit', 'crackle', 'tapeRewind']);
 
+// lista de eventos sonoros { n: nome, t: tempo, v: volume } — renderizados como clipes curtos e cacheados
+export function sfxEvents(segs, timeline, pack = 'cinematic', seed = 1) {
+  const P = PACKS[pack] || PACKS.cinematic, E = [], add = (n, t, v = 1) => E.push({ n: P.soften && HARSH.has(n) ? 'swell' : n, t: Math.max(.05, t), v: +(v * P.v).toFixed(2) });
+  timeline.forEach((s, i) => { add(P.hit[(seed + i) % P.hit.length], s.start - .05, i ? .6 : 1); if (i && i % 3 === 0) add('riser', s.start - .1, .8); });
+  segs.forEach(s => { const l = BY[s.trans] || BY.fade; add(l[s.seed % l.length], s.a + .3); if (P.add && s.trans === 'glitch') add(P.add, s.a + .35, .6); });
+  return E;
+}
+export function stingEvents(kind, d) {
+  const hit = d * .45, E = [], P = (n, t, v = 1) => E.push({ n, t: Math.max(.02, t), v });
+  if (kind === 'cinematic') { P('riser', hit, .9); P('hit', hit); P('pianoStab', hit, .8); P('swell', d * .9, .5); }
+  else if (kind === 'digital') { P('dataChirp', .15, .8); P('stutter', .35); P('zap', hit); P('boom', hit, .8); P('dataChirp', hit + .3, .5); }
+  else if (kind === 'ethereal') { P('shimmer', .1); P('tonalRiser', hit); P('chimes', hit); P('swell', hit + .2, .6); }
+  else if (kind === 'impact') { P('heartbeat', .2); P('whooshDeep', hit - .05); P('hit', hit); P('boom', hit + .02, .7); }
+  return E;
+}
+const CLIPS = new Map(), PRE = 1.2, LEN = 4.2;
+async function clip(n, v) {
+  const k = n + v;
+  if (!CLIPS.has(k)) {
+    const c = new OfflineAudioContext(2, Math.ceil(LEN * 44100), 44100);
+    LIB[n](c, c.destination, PRE, v, rng(n.length * 7 + 1));
+    CLIPS.set(k, c.startRendering());
+  }
+  return CLIPS.get(k);
+}
+// posiciona os clipes na linha do tempo (soma direta)
+export async function renderEvents(E, D) {
+  const out = new AudioBuffer({ length: Math.ceil(D * 44100), sampleRate: 44100, numberOfChannels: 2 });
+  for (const e of E) {
+    const b = await clip(e.n, e.v), o = Math.round((e.t - PRE) * 44100);
+    for (let c = 0; c < 2; c++) { const d = out.getChannelData(c), s = b.getChannelData(c); for (let j = Math.max(0, -o); j < s.length && o + j < d.length; j++) d[o + j] += s[j]; }
+  }
+  return out;
+}
+
 export function sfx(ctx, out, segs, timeline, pack = 'cinematic', seed = 1) {
   const P = PACKS[pack] || PACKS.cinematic, r = rng(seed + 7), play = (n, t, v = 1) => LIB[P.soften && HARSH.has(n) ? 'swell' : n](ctx, out, Math.max(.05, t), v * P.v, r);
   timeline.forEach((s, i) => { play(P.hit[(seed + i) % P.hit.length], s.start - .05, i ? .6 : 1); if (i && i % 3 === 0) play('riser', s.start - .1, .8); });

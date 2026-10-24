@@ -5,7 +5,9 @@ import { VOICES, synth } from './tts/index.js';
 import { audition, gallery, stop as stopAud, hooks as audHooks } from './ui/audition.js';
 import { PROFILES, previewMusic, previewAmb, previewPack, previewSting, clip } from './audio/preview.js';
 import { toWav } from './audio/wav.js';
-import { mixdown } from './audio/mix.js';
+import { mixdown, mixKey } from './audio/mix.js';
+import { pack as packBuf, unpack as unpackBuf } from './audio/bufstore.js';
+import { progress as prog, done as progDone } from './ui/toast.js';
 import { AMBS } from './audio/ambience.js';
 import { searchAudio, decodeAudio } from './media/audiosearch.js';
 import { createBg } from './render/bg.js';
@@ -44,7 +46,11 @@ const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
 let ctx, rec, track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
-const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
+// status no topo + painel flutuante (etapas em andamento)
+const status = (t, c = 'bg-zinc-600', p) => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; if (!/animate-pulse/.test(c)) return progDone();
+  const m = t.match(/ (\d+)\/(\d+)$/), L = t.replace(/ \d+\/\d+$/, '').replace(/\.\.\.$/, '');
+  prog(L.charAt(0) + L.slice(1).toLowerCase(), p ?? (m ? (m[1] - 1) / m[2] : null), m ? `${m[1]} de ${m[2]}` : '');
+};
 const count = () => $('char-count').textContent = `${el.txt.value.length} caracteres`;
 const enable = (b, on) => { b.disabled = !on; b.classList.toggle('opacity-40', !on); b.classList.toggle('cursor-not-allowed', !on); };
 const download = (blob, name) => { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1e3); };
@@ -64,7 +70,7 @@ async function makeTrack(scenes) {
   const t = await buildVoiceTrack(scenes, {
     voice: el.voice.value, effect: $('effect-select').value, tom: +el.pitch.value, speed: +el.rate.value, lead: introCfg().dur,
     onDownload: e => e?.total && status(`BAIXANDO MODELO DE VOZ ${e.loaded / e.total * 100 | 0}%`, 'bg-yellow-400 animate-pulse'),
-    onProgress: (i, n) => status(`SINTETIZANDO VOZ ${i + 1}/${n}`, 'bg-yellow-400 animate-pulse')
+    onProgress: (i, n) => { status('SINTETIZANDO VOZ', 'bg-yellow-400 animate-pulse', i / n); prog('Sintetizando voz', i / n, `frase ${Math.min(i + 1, n)} de ${n} · frases já geradas vêm do cache`); }
   });
   t.lead = introCfg().dur;
   if (t.fallback && !warned) { warned = true; warn('Não foi possível carregar a voz escolhida (rede ou modelo indisponível).\nUsando eSpeak como alternativa.'); }
@@ -92,8 +98,16 @@ async function render() {
   readText();
   comp.load(segsCur = dir.segs);
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
-  mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
-    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+  const mo = { voice: track.buffer, voiceKey: track.key, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(curId) + variation,
+    musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
+  // mixagem salva por projeto: se nada mudou, carrega na hora
+  const mk = mixKey(mo), saved = mixMem?.key === mk ? mixMem : await store.get('mix:' + curId);
+  if (saved?.key === mk && (saved.buf || saved.blob)) { prog('Carregando mixagem salva', null); mix = saved.buf || await unpackBuf(saved); }
+  else {
+    mix = await mixdown(mo, (stage, p) => prog(stage, p, 'camadas de áudio já geradas são reaproveitadas'));
+    setTimeout(() => store.set('mix:' + curId, { key: mk, ...packBuf(mix) }), 50);
+  }
+  mixMem = { key: mk, buf: mix };
   // descarta resultados de busca automática que não estão mais em uso
   assets.filter(x => x.origin === 'search' && !P.some(l => l.includes(x)) && !ov.some(o => o?.img === x)).forEach(removeAsset);
   grid(P); editor(); marks();
@@ -104,7 +118,7 @@ async function render() {
   saveWS();
 }
 
-let pendingGen = false, restored = null, dirty = false;
+let pendingGen = false, restored = null, dirty = false, mixMem = null;
 $('btn-manifest').onclick = () => generate();
 function generate() {
   if (busy) return pendingGen = true;
@@ -114,7 +128,8 @@ function generate() {
     track = await makeTrack(scenes);
     if ($('ai-sync').checked) try {
       status('WHISPER: CARREGANDO...', 'bg-yellow-400 animate-pulse');
-      const asr = await transcribe(track.dry, e => e.status === 'progress' && e.file?.endsWith('.onnx') && status(`WHISPER: BAIXANDO ${e.progress | 0}%`, 'bg-yellow-400 animate-pulse'));
+      const ak = 'asr:' + track.key, asr = await store.get(ak) || await transcribe(track.dry, e => e.status === 'progress' && e.file?.endsWith('.onnx') && status('WHISPER: BAIXANDO MODELO', 'bg-yellow-400 animate-pulse', e.progress / 100));
+      store.set(ak, asr);
       status('WHISPER: ALINHANDO...', 'bg-yellow-400 animate-pulse');
       track.timeline = align(track.timeline, asr);
     } catch (e) { console.warn('Whisper indisponível, usando estimativa', e); }
@@ -213,7 +228,7 @@ async function syncUrls() {
   const list = parseUrls($('img-urls').value), srcs = new Set(list.map(x => x.src));
   assets.filter(a => a.origin === 'url' && !srcs.has(a.src)).forEach(removeAsset);
   for (const [i, x] of list.entries()) {
-    status(`CARREGANDO IMAGEM ${i + 1}/${list.length}`, 'bg-yellow-400 animate-pulse');
+    status(`CARREGANDO IMAGENS ${i + 1}/${list.length}`, 'bg-yellow-400 animate-pulse');
     try { Object.assign(await addAsset(x), { tag: x.tag || '' }); } catch (e) { console.warn('Imagem falhou:', x.src); }
   }
   grid();

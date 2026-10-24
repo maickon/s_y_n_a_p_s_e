@@ -7,5 +7,15 @@ const img = src => new Promise((ok, no) => {
   i.src = src;
 });
 
-// tenta direto (CORS) e cai para o proxy
-export const loadImage = async u => /^(blob|data):/.test(u) ? img(u) : img(u).catch(() => img(proxy(u)));
+// cache persistente das imagens (Cache Storage): recarregar a página não baixa de novo
+const C = 'caches' in self ? caches.open('synapse-img-v1') : null;
+async function cached(u) {
+  const c = await C, hit = await c?.match(u);
+  if (hit) return img(URL.createObjectURL(await hit.blob()));
+  for (const src of [u, proxy(u)]) {
+    try { const r = await fetch(src, { mode: 'cors' }); if (!r.ok) continue; const b = await r.blob(); if (!b.type.startsWith('image/')) continue; c?.put(u, new Response(b)); return img(URL.createObjectURL(b)); } catch { }
+  }
+  throw Error('load ' + u);
+}
+// tenta cache → direto (CORS) → proxy
+export const loadImage = async u => /^(blob|data):/.test(u) ? img(u) : cached(u).catch(() => img(u).catch(() => img(proxy(u))));

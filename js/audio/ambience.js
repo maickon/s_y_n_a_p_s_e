@@ -19,17 +19,17 @@ export function ambience(ctx, out, dur, kind, seed) {
     const f = bq('bandpass', 500, 1.8); lfo(ctx, f.frequency, .07, 350, dur);
     lfo(ctx, bed(ctx, out, dur, [f], .5).gain, .11, .25, dur);
   } else if (kind === 'hum') {
-    [50, 100, 150, 250].forEach((f, i) => tone(ctx, out, { type: i ? 'sawtooth' : 'sine', f, t: 0, len: dur, vol: .09 / (i + 1), a: 1, s: 1, d: 1, r: 1, lp: 600 }));
+    [50, 100, 150, 250].forEach((f, i) => tone(ctx, out, { type: i ? 'sawtooth' : 'sine', f, t: 0, len: dur, vol: .09 / (i + 1), a: .05, s: 1, d: 1, r: .05, lp: 600 }));
     bed(ctx, out, dur, [bq('bandpass', 4000, 3)], .05);
   } else if (kind === 'space') {
     const f = bq('lowpass', 250); lfo(ctx, f.frequency, .05, 150, dur);
     bed(ctx, out, dur, [f], .6);
-    tone(ctx, out, { f: 36, t: 0, len: dur, vol: .1, a: 3, s: 1, d: 1, r: 2 });
+    tone(ctx, out, { f: 36, t: 0, len: dur, vol: .1, a: .05, s: 1, d: 1, r: .05 });
   } else if (kind === 'ocean') {
     const f = bq('lowpass', 700), g = bed(ctx, out, dur, [f], .5); g.gain.value = .3; lfo(ctx, g.gain, .09, .25, dur); lfo(ctx, f.frequency, .09, 350, dur);
   } else if (kind === 'projector') {
     for (let t = 0; t < dur; t += 1 / 24) burst(ctx, out, { t, len: .006, vol: .05 + r() * .03, type: 'bandpass', f: 2500, Q: 3 });
-    tone(ctx, out, { type: 'sawtooth', f: 60, t: 0, len: dur, vol: .02, a: 1, s: 1, d: 1, r: 1, lp: 300 });
+    tone(ctx, out, { type: 'sawtooth', f: 60, t: 0, len: dur, vol: .02, a: .05, s: 1, d: 1, r: .05, lp: 300 });
     bed(ctx, out, dur, [bq('bandpass', 1200, .8)], .025);
   } else if (kind === 'static') {
     bed(ctx, out, dur, [bq('highpass', 3000)], .09);
