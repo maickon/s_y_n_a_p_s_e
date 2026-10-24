@@ -4,3 +4,4 @@ export const CDN = {
   transformers: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1',
   whisper: 'onnx-community/whisper-base_timestamped'
 };
+CDN.clip = 'Xenova/clip-vit-base-patch32';
