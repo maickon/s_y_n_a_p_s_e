@@ -39,7 +39,7 @@ export function drawOutro(g, t, O) {
 }
 
 // posição/largura do título conforme o layout ativo
-const posFor = (L, r = {}) => L === 'split' ? { x: r.side ? W * .78 : W * .22, y: H * .42, al: 'center', mw: W * .38 }
+export const posFor = (L, r = {}) => L === 'split' ? { x: r.side ? W * .78 : W * .22, y: H * .42, al: 'center', mw: W * .38 }
   : L === 'circle' ? { x: W / 2 + (r.side ? 1 : -1) * W * .3, y: H * .45, al: 'center', mw: W * .34 }
   : L === 'frame' ? { x: W / 2, y: H * .1, al: 'center', mw: W * .8 } : { x: W * .07, y: H * .2, al: 'left', mw: W * .6 };
 

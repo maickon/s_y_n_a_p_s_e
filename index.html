@@ -7,7 +7,7 @@
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","pixi.js":"https://cdn.jsdelivr.net/npm/pixi.js@8.21.0/dist/pixi.min.mjs","pixi-filters":"https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.mjs","mediabunny":"https://cdn.jsdelivr.net/npm/mediabunny@1.60.0/dist/bundles/mediabunny.min.mjs"}}</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","pixi.js":"https://cdn.jsdelivr.net/npm/pixi.js@8.21.0/dist/pixi.min.mjs","pixi-filters":"https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.mjs","mediabunny":"https://cdn.jsdelivr.net/npm/mediabunny@1.60.0/dist/bundles/mediabunny.min.mjs","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}</script>
 </head>
 <body class="min-h-screen flex flex-col">
 <header class="border-b border-purple-900/40 bg-black/60 backdrop-blur-md p-4 sticky top-0 z-30">
@@ -82,7 +82,8 @@
       </div>
       <button id="btn-export" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="video" class="w-4 h-4"></i> WebM (preview)</button>
       <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Áudio WAV</button>
-      <button id="btn-srt" disabled class="btn col-span-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
+      <button id="btn-srt" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
+      <button id="btn-hf" disabled class="btn bg-indigo-900 hover:bg-indigo-800 text-white opacity-40 cursor-not-allowed"><i data-lucide="package" class="w-4 h-4"></i> HyperFrames</button>
     </div>
   </section>
 

@@ -1,0 +1,29 @@
+# Renderiza com HyperFrames os .zip enviados para hyperframes/ (ou manualmente)
+name: HyperFrames Render
+on:
+  push:
+    paths: ['hyperframes/*.zip']
+  workflow_dispatch:
+    inputs:
+      file: { description: 'Caminho do .zip (ex: hyperframes/video.zip)', required: true }
+      quality: { description: 'draft | looks | delivery', default: 'delivery' }
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Render
+        run: |
+          FILES="${{ inputs.file }}"
+          [ -z "$FILES" ] && FILES=$(git diff --name-only HEAD~1 HEAD -- 'hyperframes/*.zip')
+          mkdir -p out
+          for z in $FILES; do
+            n=$(basename "$z" .zip); unzip -oq "$z" -d "work/$n"
+            npx -y hyperframes@0.8 render "work/$n" -o "out/$n.mp4" --quality "${{ inputs.quality || 'delivery' }}"
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: videos, path: out/*.mp4 }

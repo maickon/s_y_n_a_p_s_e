@@ -11,6 +11,7 @@ import { transcribe } from './ai/whisper.js';
 import { align, groups, toSRT } from './core/words.js';
 import { createCompositor } from './render/compositor.js';
 import { exportMP4 } from './export/mp4.js';
+import { exportHyperFrames } from './export/hyperframes.js';
 import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
@@ -25,7 +26,7 @@ Sua consciência foi transcrita com sucesso no servidor do nada.`;
 const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-select'), pitch: $('voice-pitch'), rate: $('voice-rate') };
 const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
-const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4'];
+const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
 let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
@@ -66,7 +67,7 @@ async function run(fn) {
   busy = true; ['btn-manifest', 'btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
-  if (mix) ['btn-vary', 'btn-apply', 'btn-wav', 'btn-srt', 'btn-mp4'].forEach(b => enable($(b), true));
+  if (mix) ['btn-vary', 'btn-apply', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'].forEach(b => enable($(b), true));
   enable($('btn-export'), chunks.length > 0);
 }
 
@@ -154,6 +155,11 @@ $('btn-mp4').onclick = () => mix && run(async () => {
 
 $('btn-export').onclick = () => chunks.length && download(new Blob(chunks, { type: 'video/webm' }), `SYNAPSE_${Date.now()}.webm`);
 $('btn-wav').onclick = () => mix && download(toWav(mix), `SYNAPSE_AUDIO_${Date.now()}.wav`);
+$('btn-hf').onclick = () => mix && run(async () => {
+  status('EMPACOTANDO HYPERFRAMES...', 'bg-yellow-400 animate-pulse');
+  download(await exportHyperFrames({ segs: segsCur, caps, dir, mix, style: el.style.selectedIndex, title: dir.intro.title }), `SYNAPSE_hyperframes_${Date.now()}.zip`);
+  status('ZIP HYPERFRAMES PRONTO', 'bg-emerald-500');
+});
 $('btn-srt').onclick = () => caps.length && download(new Blob([toSRT(caps)], { type: 'text/plain' }), `SYNAPSE_${Date.now()}.srt`);
 
 // --- Ilustrações ---
