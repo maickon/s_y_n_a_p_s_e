@@ -20,7 +20,7 @@ void main(){vec2 uv=vUv;
 
 export function createBg() {
   const canvas = document.createElement('canvas'), r = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
-  r.setSize(1280, 720, false);
+  r.setPixelRatio(1.5); r.setSize(1280, 720, false);
   const u = { t: { value: 0 }, seed: { value: 0 }, glitch: { value: 0 }, style: { value: 0 } };
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: u, fragmentShader: frag,

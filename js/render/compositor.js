@@ -1,15 +1,21 @@
-import { Application, Container, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Sprite, Texture, CanvasSource } from 'pixi.js';
 import { RGBSplitFilter, GlitchFilter, CRTFilter } from 'pixi-filters';
 import { build, prepare, W, H, T, cl, ease } from './layouts.js';
 import { drawCaptions } from './captions.js';
 import { drawIntro, drawOutro, drawKinetic } from './titles.js';
 
+const K = 1.5; // render interno 1920x1080
+
 export async function createCompositor(canvas, bgCanvas) {
   const app = new Application();
-  await app.init({ canvas, width: W, height: H, preference: 'webgl', preserveDrawingBuffer: true, autoStart: false, antialias: true, background: '#000' });
-  const cap = Object.assign(document.createElement('canvas'), { width: W, height: H }), g = cap.getContext('2d');
-  const bgT = Texture.from(bgCanvas), capT = Texture.from(cap), layer = new Container({ sortableChildren: true });
-  app.stage.addChild(new Sprite(bgT), layer, new Sprite(capT));
+  await app.init({ canvas, width: W, height: H, resolution: K, preference: 'webgl', preserveDrawingBuffer: true, autoStart: false, antialias: true, background: '#000' });
+  const cap = Object.assign(document.createElement('canvas'), { width: W * K, height: H * K }), g = cap.getContext('2d');
+  g.setTransform(K, 0, 0, K, 0, 0);
+  const mk = c => new Texture({ source: new CanvasSource({ resource: c }) }), layer = new Container({ sortableChildren: true });
+  let bgT = mk(bgCanvas), capT = mk(cap);
+  const bgS = new Sprite(bgT), capS = new Sprite(capT);
+  bgS.setSize(W, H); capS.setSize(W, H);
+  app.stage.addChild(bgS, layer, capS);
   const rgb = new RGBSplitFilter(), gl = new GlitchFilter({ slices: 8, fillMode: 2 }), crt = new CRTFilter({ lineWidth: 1.2, lineContrast: .18, noise: .08, noiseSize: 1, vignetting: .32, vignettingAlpha: .8, curvature: 0 });
   app.stage.filters = [gl, rgb, crt];
   let segs = [], live = new Map();

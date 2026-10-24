@@ -10,6 +10,7 @@ import { loadTTS } from './tts/mespeak.js';
 import { transcribe } from './ai/whisper.js';
 import { align, groups, toSRT } from './core/words.js';
 import { createCompositor } from './render/compositor.js';
+import { exportMP4 } from './export/mp4.js';
 import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
@@ -24,7 +25,7 @@ Sua consciência foi transcrita com sucesso no servidor do nada.`;
 const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-select'), pitch: $('voice-pitch'), rate: $('voice-rate') };
 const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
-const EXP = ['btn-export', 'btn-wav', 'btn-srt'];
+const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4'];
 let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
@@ -65,7 +66,8 @@ async function run(fn) {
   busy = true; ['btn-manifest', 'btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
-  if (mix) ['btn-vary', 'btn-apply'].forEach(b => enable($(b), true));
+  if (mix) ['btn-vary', 'btn-apply', 'btn-wav', 'btn-srt', 'btn-mp4'].forEach(b => enable($(b), true));
+  enable($('btn-export'), chunks.length > 0);
 }
 
 // edição -> mix -> reprodução/gravação
@@ -103,7 +105,7 @@ $('btn-apply').onclick = () => track && run(render);
 function play(timeline, duration) {
   ctx ??= new AudioContext();
   ctx.resume();
-  const dest = ctx.createMediaStreamDestination(), style = el.style.selectedIndex;
+  const dest = ctx.createMediaStreamDestination();
   const bus = new GainNode(ctx, { gain: .8 }), lim = new DynamicsCompressorNode(ctx, { threshold: -6, ratio: 20, attack: .002 }), outs = [bus];
   bus.connect(lim); lim.connect(ctx.destination); lim.connect(dest);
   const t0 = ctx.currentTime + .1, src = new AudioBufferSourceNode(ctx, { buffer: mix });
@@ -115,28 +117,40 @@ function play(timeline, duration) {
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
   rec.start();
 
-  bg.u.style.value = style;
   status('TRANSMITINDO...', 'bg-emerald-400 animate-ping');
   let cur = -1;
   return new Promise(res => {
     const loop = () => {
-      const t = ctx.currentTime - t0, i = timeline.findLastIndex(s => t >= s.start - .05);
+      const t = ctx.currentTime - t0, i = drawAt(t);
       if (i !== cur && i >= 0) {
         cur = i; const h = hash(timeline[i].text);
         $('scene-counter').textContent = `${i + 1}/${timeline.length}`;
         $('scene-hash').textContent = `HASH: 0x${h.toString(16).slice(0, 6).toUpperCase()}`;
-        bg.u.seed.value = h % 100;
       }
-      const dt = cur >= 0 ? t - timeline[cur].start : 9;
-      bg.u.glitch.value = Math.max(0, 1 - dt / .3);
-      bg.u.t.value = t * 1.8; frame(t, { caps, timeline, style, dir });
       if (t < duration) return requestAnimationFrame(loop);
-      rec.onstop = () => { EXP.forEach(b => enable($(b), true)); res(); };
+      rec.onstop = () => { enable($('btn-export'), true); res(); };
       rec.stop(); status('CONCLUÍDO', 'bg-purple-500');
     };
     loop();
   });
 }
+
+// quadro determinístico no tempo t (preview e export)
+function drawAt(t) {
+  const tl = track?.timeline || [], i = tl.findLastIndex(s => t >= s.start - .05), s = tl[i], style = el.style.selectedIndex;
+  bg.u.style.value = style; bg.u.seed.value = s ? hash(s.text) % 100 : 0; bg.u.glitch.value = s ? Math.max(0, 1 - (t - s.start) / .3) : 0; bg.u.t.value = t * 1.8;
+  frame(t, { caps, timeline: tl, style, dir });
+  return i;
+}
+
+$('btn-mp4').onclick = () => mix && run(async () => {
+  const [h, fps] = $('mp4-q').value.split('p').map(Number), out = h === 1080 ? cv : Object.assign(document.createElement('canvas'), { width: 1280, height: 720 }), og = out !== cv ? out.getContext('2d') : null;
+  try {
+    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: mix, duration: mix.duration, fps, draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, 1280, 720); }, onProgress: p => status(`RENDERIZANDO MP4 ${p * 100 | 0}%`, 'bg-yellow-400 animate-pulse') });
+    download(blob, `SYNAPSE_${h}p${fps}_${Date.now()}.mp4`);
+    status(`MP4 PRONTO · ${vc.toUpperCase()}/${(ac || 'sem áudio').toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
+  } finally { drawAt(0); }
+});
 
 $('btn-export').onclick = () => chunks.length && download(new Blob(chunks, { type: 'video/webm' }), `SYNAPSE_${Date.now()}.webm`);
 $('btn-wav').onclick = () => mix && download(toWav(mix), `SYNAPSE_AUDIO_${Date.now()}.wav`);
@@ -175,7 +189,7 @@ $('img-files').onchange = async e => {
 };
 $('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
 // render determinístico por tempo (debug/export)
-window.synapse = { comp, get segs() { return segsCur; }, frame: t => (bg.u.t.value = t * 1.8, frame(t, { caps, dir, timeline: track?.timeline || [], style: el.style.selectedIndex })), get duration() { return mix?.duration || 0; } };
+window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');

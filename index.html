@@ -7,7 +7,7 @@
 <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","pixi.js":"https://cdn.jsdelivr.net/npm/pixi.js@8.21.0/dist/pixi.min.mjs","pixi-filters":"https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.mjs"}}</script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","pixi.js":"https://cdn.jsdelivr.net/npm/pixi.js@8.21.0/dist/pixi.min.mjs","pixi-filters":"https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.mjs","mediabunny":"https://cdn.jsdelivr.net/npm/mediabunny@1.60.0/dist/bundles/mediabunny.min.mjs"}}</script>
 </head>
 <body class="min-h-screen flex flex-col">
 <header class="border-b border-purple-900/40 bg-black/60 backdrop-blur-md p-4 sticky top-0 z-30">
@@ -76,7 +76,11 @@
     <div class="grid grid-cols-2 gap-3">
       <button id="btn-test" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="volume-2" class="w-4 h-4"></i> Testar Voz</button>
       <button id="btn-manifest" class="btn bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 text-white"><i data-lucide="play-circle" class="w-4 h-4"></i> Manifestar</button>
-      <button id="btn-export" disabled class="btn bg-emerald-700 hover:bg-emerald-600 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> Vídeo WebM</button>
+      <div class="col-span-2 flex gap-2">
+        <button id="btn-mp4" disabled class="btn flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> Exportar MP4</button>
+        <select id="mp4-q" class="inp !w-auto text-xs"><option>720p30</option><option>720p60</option><option selected>1080p30</option><option>1080p60</option></select>
+      </div>
+      <button id="btn-export" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="video" class="w-4 h-4"></i> WebM (preview)</button>
       <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Áudio WAV</button>
       <button id="btn-srt" disabled class="btn col-span-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
     </div>
@@ -84,13 +88,13 @@
 
   <section class="lg:col-span-7 flex flex-col gap-4">
     <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-purple-900/40 shadow-2xl">
-      <canvas id="view-canvas" width="1280" height="720" class="w-full h-full"></canvas>
+      <canvas id="view-canvas" class="w-full h-full"></canvas>
       <div class="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-zinc-400">
         <span id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-600"></span><span id="status-text">CARREGANDO VOZ...</span></div>
       <div class="absolute top-4 right-4 z-10 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-purple-400"><span id="scene-hash">HASH: 0x000000</span></div>
     </div>
     <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-wrap gap-3 justify-between text-xs text-zinc-400">
-      <span>Cena: <strong id="scene-counter" class="text-zinc-200">0/0</strong> · 1280x720</span>
+      <span>Cena: <strong id="scene-counter" class="text-zinc-200">0/0</strong> · 1920x1080</span>
       <span class="flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i> eSpeak · Whisper · PixiJS · WebAudio · 100% Client-Side</span>
     </div>
     <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-col gap-3">
