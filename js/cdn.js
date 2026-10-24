@@ -1,6 +1,6 @@
-// URLs centralizadas das libs (versões fixas)
+// URLs das libs: locais (vendor/) ou CDN para runtimes de IA
 export const CDN = {
-  mespeak: 'https://cdn.jsdelivr.net/npm/mespeak@2.0.2/',
+  mespeak: new URL('../vendor/mespeak/', import.meta.url).href,
   transformers: 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1',
   whisper: 'onnx-community/whisper-base_timestamped'
 };

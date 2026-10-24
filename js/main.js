@@ -17,6 +17,8 @@ import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
+import { warn, progress } from './ui/modal.js';
+import * as store from './core/store.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -53,7 +55,7 @@ async function makeTrack(scenes) {
     onDownload: e => e?.total && status(`BAIXANDO MODELO DE VOZ ${e.loaded / e.total * 100 | 0}%`, 'bg-yellow-400 animate-pulse'),
     onProgress: (i, n) => status(`SINTETIZANDO VOZ ${i + 1}/${n}`, 'bg-yellow-400 animate-pulse')
   });
-  if (t.fallback && !warned) { warned = true; alert('Não foi possível carregar a voz escolhida (rede/modelo). Usando eSpeak como alternativa.'); }
+  if (t.fallback && !warned) { warned = true; warn('Não foi possível carregar a voz escolhida (rede ou modelo indisponível).\nUsando eSpeak como alternativa.'); }
   return t;
 }
 
@@ -94,7 +96,7 @@ async function render() {
 
 $('btn-manifest').onclick = () => {
   const scenes = splitScenes(el.txt.value);
-  if (!scenes.length) return alert('Digite um roteiro válido.');
+  if (!scenes.length) return warn('Digite um roteiro válido.');
   run(async () => {
     track = await makeTrack(scenes);
     if ($('ai-sync').checked) try {
@@ -141,11 +143,16 @@ function drawAt(t) {
 
 $('btn-mp4').onclick = () => mix && run(async () => {
   const [h, fps] = $('mp4-q').value.split('p').map(Number), out = h === 1080 ? cv : Object.assign(document.createElement('canvas'), { width: 1280, height: 720 }), og = out !== cv ? out.getContext('2d') : null;
+  const was = pl.time, m = progress({ title: `Exportando MP4 ${h}p${fps}`, source: cv });
+  pl.pause();
   try {
-    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: mix, duration: mix.duration, fps, draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, 1280, 720); }, onProgress: p => status(`RENDERIZANDO MP4 ${p * 100 | 0}%`, 'bg-yellow-400 animate-pulse') });
+    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: mix, duration: mix.duration, fps, cancelled: () => m.cancelled,
+      draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, 1280, 720); },
+      onProgress: (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`) });
     download(blob, `SYNAPSE_${h}p${fps}_${Date.now()}.mp4`);
     status(`MP4 PRONTO · ${vc.toUpperCase()}/${(ac || 'sem áudio').toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
-  } finally { drawAt(0); }
+  } catch (e) { if (e.message !== 'CANCELADO') throw e; status('EXPORTAÇÃO CANCELADA', 'bg-zinc-600'); }
+  finally { m.close(); pl.seek(was); }
 });
 
 // grava a reprodução em tempo real (WebM)
@@ -160,8 +167,8 @@ $('btn-export').onclick = () => {
 };
 $('btn-wav').onclick = () => mix && download(toWav(mix), `SYNAPSE_AUDIO_${Date.now()}.wav`);
 $('btn-hf').onclick = () => mix && run(async () => {
-  status('EMPACOTANDO HYPERFRAMES...', 'bg-yellow-400 animate-pulse');
-  download(await exportHyperFrames({ segs: segsCur, caps, dir, mix, style: el.style.selectedIndex, title: dir.intro.title }), `SYNAPSE_hyperframes_${Date.now()}.zip`);
+  const m = progress({ title: 'Empacotando HyperFrames' }); m.set(.3, 'Gerando composição, imagens e áudio...');
+  try { download(await exportHyperFrames({ segs: segsCur, caps, dir, mix, style: el.style.selectedIndex, title: dir.intro.title }), `SYNAPSE_hyperframes_${Date.now()}.zip`); } finally { m.close(); }
   status('ZIP HYPERFRAMES PRONTO', 'bg-emerald-500');
 });
 $('btn-srt').onclick = () => caps.length && download(new Blob([toSRT(caps)], { type: 'text/plain' }), `SYNAPSE_${Date.now()}.srt`);
@@ -176,7 +183,7 @@ function grid(P = []) {
     d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span><button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
     d.querySelector('img').onclick = () => goTo(a.img);
     d.querySelector('button').onclick = () => {
-      removeAsset(a); live(3);
+      removeAsset(a); live(3); if (a.origin === 'file') saveFiles();
       if (a.origin === 'url') $('img-urls').value = $('img-urls').value.split('\n').filter(l => !l.includes(a.src)).join('\n');
       grid();
     };
@@ -195,7 +202,8 @@ async function syncUrls() {
 }
 
 $('img-files').onchange = async e => {
-  for (const f of e.target.files) await addAsset({ src: URL.createObjectURL(f), tag: f.name.replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).catch(() => {});
+  for (const f of e.target.files) await addFile(f);
+  saveFiles();
   e.target.value = ''; grid(); live(3);
 };
 $('img-urls').onchange = () => track ? live(3) : syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
@@ -228,7 +236,12 @@ $('pl-play').onclick = () => pl.toggle();
 $('pl-back').onclick = () => pl.seek(pl.time - 5);
 $('pl-fwd').onclick = () => pl.seek(pl.time + 5);
 $('pl-seek').oninput = e => pl.seek(+e.target.value);
-document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && mix) { e.preventDefault(); pl.toggle(); } });
+$('pl-full').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen();
+document.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || document.querySelector('.z-\\[100\\]')) return;
+  if (e.code === 'Space' && mix) { e.preventDefault(); pl.toggle(); }
+  if (e.code === 'KeyF') $('pl-full').click();
+});
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) pl.seek(s.a + .5); };
 
 window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
@@ -237,13 +250,14 @@ window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get dura
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 const setMusic = m => {
   music = m; live(1);
+  m?.blob ? store.set('music', { name: m.name, blob: m.blob }) : !m && store.del('music');
   $('music-name').textContent = m ? '♪ ' + m.name : '♪ Procedural (gerada pelo estilo)';
   $('music-clear').classList.toggle('hidden', !m);
 };
 $('music-clear').onclick = () => setMusic(null);
 $('music-file').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  try { setMusic({ name: f.name, buf: await decodeAudio(f) }); } catch { alert('Formato de áudio não suportado.'); }
+  try { setMusic({ name: f.name, buf: await decodeAudio(f), blob: f }); } catch { warn('Formato de áudio não suportado.'); }
   e.target.value = '';
 };
 $('music-search').onclick = async () => {
@@ -260,15 +274,15 @@ $('music-search').onclick = async () => {
       pl.onclick = () => au.paused ? (document.querySelectorAll('audio').forEach(a => a.pause()), au.play(), pl.textContent = '■') : (au.pause(), pl.textContent = '▶');
       us.onclick = async () => {
         us.textContent = '...';
-        try { setMusic({ name: x.credit, buf: await decodeAudio(x.url) }); us.textContent = '✓'; }
-        catch { us.textContent = 'USAR'; alert('Essa fonte bloqueia download direto (CORS). Baixe o arquivo e use "Enviar".'); }
+        try { const blob = await (await fetch(x.url)).blob(); setMusic({ name: x.credit, buf: await decodeAudio(blob), blob }); us.textContent = '✓'; }
+        catch { us.textContent = 'USAR'; warn('Essa fonte bloqueia download direto (CORS).\nBaixe o arquivo e use "Enviar".'); }
       };
       return d;
     }));
     if (!rs.length) box.textContent = 'Nada encontrado.';
   } catch (e) { box.textContent = 'Busca indisponível: ' + e.message; }
 };
-$('music-q').onkeydown = e => e.key === 'Enter' && $('music-search').click();
+$('music-q').onkeydown = e => { if (e.key === 'Enter') $('music-search').click(); };
 
 // --- Editor de cenas ---
 const LN = { full: 'Tela cheia', frame: 'Moldura', split: 'Dividida', double: 'Dupla exp.', circle: 'Círculo' }, TNm = { fade: 'Fade', glitch: 'Glitch', zoom: 'Zoom', pixel: 'Pixel', wipe: 'Wipe', slide: 'Slide' };
@@ -288,3 +302,12 @@ function editor() {
     return d;
   }));
 }
+
+// --- Persistência (IndexedDB) ---
+const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
+const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
+await store.bindForm(() => { count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+for (const f of await store.get('imgs') || []) await addFile(f);
+grid();
+const ms = await store.get('music');
+if (ms) try { music = { ...ms, buf: await decodeAudio(ms.blob) }; $('music-name').textContent = '♪ ' + ms.name; $('music-clear').classList.remove('hidden'); } catch { }

@@ -1,7 +1,7 @@
 import { Output, Mp4OutputFormat, BufferTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH, getFirstEncodableVideoCodec, getFirstEncodableAudioCodec } from 'mediabunny';
 
 // render determinístico quadro a quadro -> MP4 (WebCodecs)
-export async function exportMP4({ canvas, audio, duration, fps, draw, onProgress }) {
+export async function exportMP4({ canvas, audio, duration, fps, draw, onProgress, cancelled }) {
   const { width, height } = canvas;
   const vc = await getFirstEncodableVideoCodec(['avc', 'vp9', 'av1'], { width, height }), ac = await getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: audio.sampleRate });
   if (!vc) throw Error('Navegador sem suporte a WebCodecs (use Chrome/Edge)');
@@ -14,9 +14,10 @@ export async function exportMP4({ canvas, audio, duration, fps, draw, onProgress
   if (as) await as.add(audio);
   const n = Math.ceil(duration * fps);
   for (let i = 0; i < n; i++) {
+    if (cancelled?.()) { await out.cancel(); throw Error('CANCELADO'); }
     draw(i / fps);
     await vs.add(i / fps, 1 / fps);
-    if (i % 10 === 0) { onProgress?.(i / n); await new Promise(r => setTimeout(r)); }
+    if (i % 10 === 0) { onProgress?.(i / n, i, n); await new Promise(r => setTimeout(r)); }
   }
   await out.finalize();
   return { blob: new Blob([out.target.buffer], { type: 'video/mp4' }), vc, ac };

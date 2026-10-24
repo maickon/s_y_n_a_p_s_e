@@ -22,3 +22,7 @@ Settings → Pages → Branch `master` / root.
 1. No app: **Manifestar** → botão **HyperFrames** baixa um `.zip`.
 2. Local: descompacte e rode `npx hyperframes preview` (Studio) ou `npx hyperframes render -o video.mp4` (Node 22+ e FFmpeg).
 3. Nuvem (grátis): faça commit do `.zip` em `hyperframes/` → a Action **HyperFrames Render** gera o MP4 (aba Actions → Artifacts). Também pode rodar manualmente em *Run workflow*.
+
+## Libs locais
+As libs ficam em `vendor/` (ver `vendor/README.md`). O CSS do Tailwind é pré-gerado em `css/tw.css`; ao usar classes novas rode:
+`npx tailwindcss@3.4.16 -i css/tw.src.css -o css/tw.css --minify`

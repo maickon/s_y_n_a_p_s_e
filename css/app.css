@@ -12,3 +12,4 @@ body{font-family:'Fira Code',monospace;background:#050508;color:#d1d5db;overflow
 .btn{font-weight:700;padding:.75rem 1rem;border-radius:.5rem;display:flex;align-items:center;justify-content:center;gap:.5rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;transition:.2s}
 .inp{width:100%;background:#18181b;border:1px solid #27272a;border-radius:.5rem;padding:.65rem;font-size:.85rem;outline:none}
 .inp:focus{border-color:#a855f7}
+#stage:fullscreen{background:#000;justify-content:center;padding:1rem}#stage:fullscreen>.aspect-video{width:min(100%,calc((100vh - 90px)*16/9));margin:0 auto;border:0}
