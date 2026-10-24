@@ -21,6 +21,7 @@ import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
 import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
+import { createTimeline } from './ui/timeline.js';
 import { warn, ask, progress } from './ui/modal.js';
 import * as store from './core/store.js';
 
@@ -100,7 +101,7 @@ async function render() {
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
-  if (first) pl.play(0);
+  if (first && navigator.userActivation?.hasBeenActive) pl.play(0);
   status('PREVIEW PRONTO', 'bg-emerald-500');
 }
 
@@ -230,11 +231,12 @@ const pl = createPlayer({
     if (document.activeElement !== sk) sk.value = t;
     $('pl-time').textContent = `${fmt(t)} / ${fmt(D)}`;
     $('pl-play').textContent = pl.playing ? '❚❚' : '▶';
-    const tl = track?.timeline || [], i = tl.findLastIndex(s => t >= s.start - .05);
+    tl.set(t);
+    const sc = track?.timeline || [], i = sc.findLastIndex(s => t >= s.start - .05);
     if (i !== lastScene) {
-      lastScene = i; $('scene-counter').textContent = `${Math.max(i + 1, 0)}/${tl.length}`;
-      if (i >= 0) $('scene-hash').textContent = `HASH: 0x${hash(tl[i].text).toString(16).slice(0, 6).toUpperCase()}`;
-      document.querySelectorAll('#scene-list > div').forEach((d, k) => d.classList.toggle('ring-1', k === i));
+      lastScene = i; $('scene-counter').textContent = `${Math.max(i + 1, 0)}/${sc.length}`;
+      if (i >= 0) $('scene-hash').textContent = `HASH: 0x${hash(sc[i].text).toString(16).slice(0, 6).toUpperCase()}`;
+      if (follow && pl.playing && i >= 0 && i !== sel) { sel = i; tl.select(i); inspector(); }
     }
   },
   onEnd: () => rec?.state === 'recording' && rec.stop()
@@ -244,7 +246,7 @@ function marks() {
   $('pl-seek').max = D;
   $('pl-marks').innerHTML = track.timeline.map((s, i) => `<span title="Cena ${i + 1}" style="left:${s.start / D * 100}%" class="absolute top-0 w-px h-2 bg-purple-400"></span>`).join('');
 }
-$('pl-play').onclick = () => pl.toggle();
+$('pl-play').onclick = () => { follow = true; pl.toggle(); };
 $('pl-back').onclick = () => pl.seek(pl.time - 5);
 $('pl-fwd').onclick = () => pl.seek(pl.time + 5);
 $('pl-seek').oninput = e => pl.seek(+e.target.value);
@@ -254,7 +256,7 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Space' && mix) { e.preventDefault(); pl.toggle(); }
   if (e.code === 'KeyF') $('pl-full').click();
 });
-const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) pl.seek(s.a + .5); };
+const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
 window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
@@ -304,22 +306,40 @@ const LN = { full: 'Tela cheia', push: 'Push-in', pan: 'Pan horizontal', tilt: '
   TNm = { fade: 'Fade', dissolve: 'Dissolver', dipblack: 'Fade p/ preto', dipwhite: 'Fade p/ branco', flash: 'Flash', lightleak: 'Light leak', burn: 'Film burn', blur: 'Desfoque', zoom: 'Zoom', whip: 'Whip pan', push: 'Push', slide: 'Slide', wipe: 'Wipe', iris: 'Íris', barn: 'Portas', blinds: 'Persianas', glitch: 'Glitch', rgb: 'RGB split', pixel: 'Pixel', warp: 'Distorção', shake: 'Impacto' },
   GN = Object.fromEntries(GRADE_NAMES.map(k => [k, GRADES[k][0]]));
 const opts = (list, names, cur, auto) => `<option value="">Auto${auto ? ' (' + names[auto] + ')' : ''}</option>` + list.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${names[k]}</option>`).join('');
+const escH = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+let sel = 0, follow = true;
+// timeline + inspetor da cena selecionada
 function editor() {
-  const sel = 'bg-zinc-900 border border-zinc-800 rounded p-1 w-full';
-  $('scene-list').replaceChildren(...track.timeline.map((s, i) => {
-    const o = ov[i] || {}, sg = segsCur.find(x => x.scene === i), d = document.createElement('div');
-    d.className = 'grid grid-cols-12 gap-1 items-center bg-black/30 rounded p-1';
-    const imgs = Object.fromEntries(assets.map((a, k) => [k, `${k + 1}. ${(a.tag || a.origin).slice(0, 14)}`]));
-    d.innerHTML = `<button class="col-span-1 text-purple-400 text-center hover:text-emerald-300" title="Ir para a cena">▶${i + 1}</button><span class="col-span-3 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
-      <select data-k="layout" class="col-span-2 ${sel}">${opts(LAYOUT_NAMES, LN, o.layout, !o.layout && sg?.layout)}</select>
-      <select data-k="trans" class="col-span-2 ${sel}">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select>
-      <select data-k="grade" class="col-span-2 ${sel}">${opts(GRADE_NAMES, GN, o.grade, !o.grade && sg?.grade)}</select>
-      <select data-k="img" class="col-span-2 ${sel}">${opts(Object.keys(imgs), imgs, o.img ? String(assets.indexOf(o.img)) : '', '')}</select>`;
-    d.querySelector('button').onclick = () => pl.seek(Math.max(0, s.start - .3));
-    d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value };  live(2); });
-    return d;
-  }));
+  tl.render({ duration: mix.duration, segs: segsCur, caps, wave: track.dry.getChannelData(0), intro: dir.intro.b - .2, outro: dir.outro.off ? null : [dir.outro.a, dir.outro.b], music: music?.name || 'Trilha procedural · ' + STYLES[el.style.selectedIndex].n, sting: !!introCfg().vig });
+  sel = Math.min(sel, track.timeline.length - 1); tl.select(sel); inspector();
 }
+function selectScene(i, seek) {
+  if (!track) return;
+  follow = false;
+  sel = Math.max(0, Math.min(i, track.timeline.length - 1)); tl.select(sel); inspector();
+  if (seek) pl.seek(Math.max(0, track.timeline[sel].start - .3));
+}
+function inspector() {
+  const b = $('insp-body'), i = sel, s = track.timeline[i], o = ov[i] || {}, sg = segsCur.find(x => x.scene === i), n = track.timeline.length;
+  const cur = o.img || assets.find(a => a.img === sg?.img);
+  b.innerHTML = `<div class="flex items-center justify-between"><button data-nav="-1" class="pbtn">◀</button><b class="text-zinc-200">Cena ${i + 1} de ${n}</b><button data-nav="1" class="pbtn">▶</button></div>
+    <p class="text-zinc-300 bg-black/40 rounded-lg p-2 leading-relaxed">${escH(s.text)}</p>
+    <label class="fl">Layout<select data-k="layout" class="inp">${opts(LAYOUT_NAMES, LN, o.layout, !o.layout && sg?.layout)}</select></label>
+    <label class="fl">Transição<select data-k="trans" class="inp">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select></label>
+    <label class="fl">Tratamento<select data-k="grade" class="inp">${opts(GRADE_NAMES, GN, o.grade, !o.grade && sg?.grade)}</select></label>
+    <div class="fl">Imagem <span class="text-zinc-600">(clique para trocar)</span><div class="grid grid-cols-3 gap-1.5">
+      <div data-img="" class="tile ${!o.img ? 'on' : ''} flex items-center justify-center text-[10px]">Auto</div>
+      ${assets.map((a, k) => `<div data-img="${k}" class="tile ${o.img === a ? 'on' : !o.img && a === cur ? 'on' : ''}" title="${escH(a.tag || a.origin)}" style="background-image:url('${a.img.src}')"></div>`).join('')}</div></div>
+    <button data-go class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="play" class="w-4 h-4"></i> Ir para a cena</button>`;
+  const set = (k, v) => { ov[i] = { ...ov[i], [k]: v }; live(2); };
+  b.querySelectorAll('select').forEach(x => x.onchange = () => set(x.dataset.k, x.value || undefined));
+  b.querySelectorAll('[data-img]').forEach(x => x.onclick = () => { set('img', x.dataset.img === '' ? undefined : assets[x.dataset.img]); b.querySelectorAll('[data-img]').forEach(y => y.classList.toggle('on', y === x)); });
+  b.querySelectorAll('[data-nav]').forEach(x => x.onclick = () => selectScene(i + +x.dataset.nav, true));
+  b.querySelector('[data-go]').onclick = () => selectScene(i, true);
+  lucide.createIcons({ root: b });
+}
+const tl = createTimeline($('tl-inner'), $('tl-scroll'), { onSeek: t => pl.seek(t), onSelect: i => selectScene(i) });
+$('tl-zoom').oninput = e => tl.setZoom(+e.target.value);
 
 // --- Texto, cores e marca d'água (só visual: redesenha sem refazer áudio) ---
 const TX = { wm: { type: 'none' } };
@@ -399,6 +419,17 @@ $('vig-prev').onclick = () => {
 };
 vigUI();
 
+// --- Abas do painel, menu de exportação, prévia automática ---
+const showTab = k => { document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === k)); document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === k)); store.set('tab', k); };
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+showTab(await store.get('tab') || 'script');
+$('btn-export-menu').onclick = e => { e.stopPropagation(); $('export-menu').classList.toggle('hidden'); };
+document.addEventListener('click', e => !e.target.closest('#export-menu') && $('export-menu').classList.add('hidden'));
+let lastGen = '', genT;
+const gen = () => { if (busy) return genT = setTimeout(gen, 800); if (el.txt.value.trim() && el.txt.value !== lastGen) { lastGen = el.txt.value; $('btn-manifest').click(); } };
+el.txt.addEventListener('input', () => { clearTimeout(genT); if ($('auto-gen').checked) genT = setTimeout(gen, 1800); });
+el.txt.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); lastGen = el.txt.value; $('btn-manifest').click(); } });
+
 // --- Persistência (IndexedDB) ---
 const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
@@ -410,3 +441,5 @@ for (const f of await store.get('imgs') || []) await addFile(f);
 grid();
 const ms = await store.get('music');
 if (ms) try { music = { ...ms, buf: await decodeAudio(ms.blob) }; $('music-name').textContent = '♪ ' + ms.name; $('music-clear').classList.remove('hidden'); } catch { }
+// prévia automática ao abrir
+if ($('auto-gen').checked && el.txt.value.trim()) { lastGen = el.txt.value; $('btn-manifest').click(); }

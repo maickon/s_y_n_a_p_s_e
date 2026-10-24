@@ -9,140 +9,71 @@
 <link rel="stylesheet" href="css/app.css">
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js","pixi.js":"./vendor/pixi.min.mjs","pixi-filters":"./vendor/pixi-filters.mjs","mediabunny":"./vendor/mediabunny.min.mjs","fflate":"./vendor/fflate.mjs","onnxruntime-web":"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/esm/ort.min.js"}}</script>
 </head>
-<body class="min-h-screen flex flex-col">
-<header class="border-b border-purple-900/40 bg-black/60 backdrop-blur-md p-4 sticky top-0 z-30">
-  <div class="max-w-7xl mx-auto flex justify-between items-center gap-3">
-    <div class="flex items-center gap-3">
-      <i data-lucide="brain-circuit" class="w-8 h-8 text-emerald-400 animate-pulse"></i>
-      <div>
-        <h1 class="text-2xl font-syne font-extrabold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 glitch" data-text="S.Y.N.A.P.S.E v5.0">S.Y.N.A.P.S.E v5.0</h1>
-        <p class="text-xs text-emerald-500/70 tracking-widest uppercase">Gerador de Vídeo Distópico Procedural</p>
-      </div>
+<body class="h-screen flex flex-col overflow-hidden text-[12px]">
+<header class="h-12 shrink-0 flex items-center gap-3 px-3 border-b border-purple-900/40 bg-black/70">
+  <i data-lucide="brain-circuit" class="w-6 h-6 text-emerald-400"></i>
+  <h1 class="font-syne font-extrabold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 text-lg hidden md:block">S.Y.N.A.P.S.E</h1>
+  <input id="video-title" data-persist class="inp !py-1.5 !w-56 text-xs" placeholder="Título do vídeo">
+  <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400"><span id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-600"></span><span id="status-text">CARREGANDO...</span></div>
+  <div class="flex-1"></div>
+  <button id="btn-vary" disabled class="btn !py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="shuffle" class="w-4 h-4"></i> Variar</button>
+  <button id="btn-manifest" class="btn !py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 text-white"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Gerar prévia</button>
+  <div class="relative">
+    <button id="btn-export-menu" class="btn !py-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 text-white"><i data-lucide="download" class="w-4 h-4"></i> Exportar</button>
+    <div id="export-menu" class="hidden absolute right-0 top-11 z-50 w-64 bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-3 flex flex-col gap-2">
+      <div class="flex gap-2"><button id="btn-mp4" disabled class="btn flex-1 bg-emerald-700 hover:bg-emerald-600 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> MP4</button>
+      <select id="mp4-q" data-persist class="inp !w-auto text-xs"><option>720p30</option><option>720p60</option><option selected>1080p30</option><option>1080p60</option></select></div>
+      <button id="btn-export" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="video" class="w-4 h-4"></i> Gravar WebM</button>
+      <button id="btn-wav" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Áudio WAV</button>
+      <button id="btn-srt" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
+      <button id="btn-hf" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="package" class="w-4 h-4"></i> HyperFrames (.zip)</button>
     </div>
-    <span class="hidden sm:inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-800/50">
-      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> NÚCLEO NEURAL: ATIVO</span>
   </div>
 </header>
-
-<main class="max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
-  <section class="lg:col-span-5 flex flex-col gap-4 bg-zinc-950/80 p-5 rounded-xl border border-purple-900/30">
-    <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="terminal" class="w-4 h-4"></i> Roteiro</h2>
-      <button id="btn-preset" class="text-xs text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Exemplo</button>
-    </div>
-    <div>
-      <textarea id="script-input" data-persist class="inp h-48 lg:h-60 text-emerald-300 resize-none leading-relaxed" placeholder="Cada frase vira uma cena..."></textarea>
-      <div class="text-[10px] text-zinc-500 mt-1 flex justify-between"><span>Frases (. ! ?) ou linhas = cenas.</span><span id="char-count">0 caracteres</span></div>
-    </div>
-    <label class="text-xs font-semibold text-zinc-400 flex flex-col gap-2"><span class="flex items-center gap-2"><i data-lucide="mic" class="w-4 h-4 text-purple-400"></i> Voz Sintética</span>
-      <select id="voice-select" data-persist class="inp"></select>
-      <select id="effect-select" data-persist class="inp" title="Efeito de voz"></select></label>
-    <label class="text-xs font-semibold text-zinc-400 flex flex-col gap-2"><span class="flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4 text-purple-400"></i> Dimensão Estética</span>
-      <select id="style-select" data-persist class="inp"></select>
-      <select id="grade-select" data-persist class="inp" title="Tratamento de cor das imagens"></select></label>
-    <div class="grid grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400">
-      <label>Tom <span id="pitch-val" class="text-purple-400 float-right">0</span><input type="range" id="voice-pitch" data-persist min="-12" max="12" value="0" class="w-full accent-purple-500 mt-1"></label>
-      <label>Velocidade <span id="rate-val" class="text-purple-400 float-right">1</span><input type="range" id="voice-rate" data-persist min="0.6" max="1.6" step="0.05" value="1" class="w-full accent-purple-500 mt-1"></label>
-    </div>
-    <div class="flex flex-col gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80">
-      <div class="flex justify-between items-center text-xs font-semibold text-zinc-400">
-        <span class="flex items-center gap-2"><i data-lucide="image" class="w-4 h-4 text-purple-400"></i> Ilustrações</span>
-        <label class="text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"><i data-lucide="upload" class="w-3 h-3"></i> Enviar<input type="file" id="img-files" accept="image/*" multiple hidden></label>
-      </div>
-      <textarea id="img-urls" data-persist class="inp h-20 text-[11px] text-zinc-300 resize-y" placeholder="Uma URL por linha. Opcional: palavra | https://...  (liga a imagem à cena com a palavra)"></textarea>
-      <div id="img-grid" class="grid grid-cols-5 gap-1.5"></div>
-      <label class="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer"><input type="checkbox" id="img-search" data-persist checked class="accent-emerald-500"> Buscar imagens grátis p/ cenas sem imagem (Wikimedia + Openverse)</label>
-      <label class="flex items-center gap-2 text-[11px] text-zinc-400 cursor-pointer"><input type="checkbox" id="img-clip" data-persist class="accent-emerald-500"> Associação IA imagem↔frase (CLIP · ~90MB)</label>
-    </div>
-    <div class="flex flex-col gap-2 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 text-[11px] text-zinc-400">
-      <div class="flex justify-between items-center text-xs font-semibold">
-        <span class="flex items-center gap-2"><i data-lucide="music" class="w-4 h-4 text-purple-400"></i> Trilha Sonora</span>
-        <label class="text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1"><i data-lucide="upload" class="w-3 h-3"></i> Enviar<input type="file" id="music-file" accept="audio/*" hidden></label>
-      </div>
-      <div class="flex items-center gap-2"><span id="music-name" class="flex-1 truncate text-emerald-300">♪ Procedural (gerada pelo estilo)</span><button id="music-clear" class="hidden text-red-400">✕</button></div>
-      <div class="flex gap-2"><input id="music-q" class="inp flex-1 !p-2 text-[11px]" placeholder="Buscar trilha grátis (Openverse): ambient, cyberpunk..."><button id="music-search" class="px-3 rounded bg-zinc-800 hover:bg-zinc-700"><i data-lucide="search" class="w-3 h-3"></i></button></div>
-      <div id="music-results" class="flex flex-col gap-1 max-h-32 overflow-y-auto"></div>
-      <label class="flex items-center justify-between gap-2">Ambiente <select id="amb-select" data-persist class="inp !p-1.5 !w-auto text-[11px]"></select></label>
-      <label class="flex items-center justify-between gap-2">Efeitos sonoros <select id="sfx-pack" data-persist class="inp !p-1.5 !w-auto text-[11px]"></select></label>
-      <div class="grid grid-cols-3 gap-2">
-        <label>Música <input type="range" id="vol-music" data-persist min="0" max="100" value="60" class="w-full accent-purple-500"></label>
-        <label>Ambiente <input type="range" id="vol-amb" data-persist min="0" max="100" value="50" class="w-full accent-purple-500"></label>
-        <label>Efeitos <input type="range" id="vol-sfx" data-persist min="0" max="100" value="70" class="w-full accent-purple-500"></label>
-      </div>
-    </div>
-    <label class="flex items-center gap-2 text-[11px] text-zinc-400 bg-zinc-900/50 p-3 rounded-lg border border-zinc-800/80 cursor-pointer">
-      <input type="checkbox" id="ai-sync" data-persist class="accent-emerald-500"> <i data-lucide="captions" class="w-4 h-4 text-emerald-400"></i>
-      Sincronia IA das legendas (Whisper · ~80MB no 1º uso, depois em cache)</label>
-    <div class="grid grid-cols-2 gap-3">
-      <button id="btn-test" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="volume-2" class="w-4 h-4"></i> Testar Voz</button>
-      <button id="btn-manifest" class="btn bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-600 text-white"><i data-lucide="play-circle" class="w-4 h-4"></i> Manifestar</button>
-      <div class="col-span-2 flex gap-2">
-        <button id="btn-mp4" disabled class="btn flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 text-white opacity-40 cursor-not-allowed"><i data-lucide="film" class="w-4 h-4"></i> Exportar MP4</button>
-        <select id="mp4-q" data-persist class="inp !w-auto text-xs"><option>720p30</option><option>720p60</option><option selected>1080p30</option><option>1080p60</option></select>
-      </div>
-      <button id="btn-export" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="video" class="w-4 h-4"></i> Gravar WebM</button>
-      <button id="btn-wav" disabled class="btn bg-teal-800 hover:bg-teal-700 text-white opacity-40 cursor-not-allowed"><i data-lucide="audio-lines" class="w-4 h-4"></i> Áudio WAV</button>
-      <button id="btn-srt" disabled class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="subtitles" class="w-4 h-4"></i> Legendas SRT</button>
-      <button id="btn-hf" disabled class="btn bg-indigo-900 hover:bg-indigo-800 text-white opacity-40 cursor-not-allowed"><i data-lucide="package" class="w-4 h-4"></i> HyperFrames</button>
-    </div>
-  </section>
-
-  <section class="lg:col-span-7 flex flex-col gap-4">
-    <div id="stage" class="flex flex-col gap-4">
-    <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-purple-900/40 shadow-2xl">
-      <canvas id="view-canvas" class="w-full h-full"></canvas>
-      <div class="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-zinc-400">
-        <span id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-600"></span><span id="status-text">CARREGANDO VOZ...</span></div>
-      <div class="absolute top-4 right-4 z-10 bg-black/60 px-3 py-1.5 rounded-md border border-zinc-800 text-xs text-purple-400"><span id="scene-hash">HASH: 0x000000</span></div>
-    </div>
-    <div class="flex items-center gap-2 bg-zinc-950/80 p-2 rounded-xl border border-zinc-800 text-zinc-300">
-      <button id="pl-back" class="px-2 py-1 rounded hover:bg-zinc-800" title="-5s">⏪</button>
-      <button id="pl-play" class="w-10 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white" title="Play/Pausa (espaço)">▶</button>
-      <button id="pl-fwd" class="px-2 py-1 rounded hover:bg-zinc-800" title="+5s">⏩</button>
-      <span id="pl-time" class="text-xs w-24 text-center tabular-nums">0:00 / 0:00</span>
-      <div class="relative flex-1"><input type="range" id="pl-seek" min="0" max="0" step="0.01" value="0" class="w-full accent-emerald-500"><div id="pl-marks" class="absolute inset-x-0 -top-1 h-2 pointer-events-none"></div></div>
-      <button id="pl-full" class="px-2 py-1 rounded hover:bg-zinc-800" title="Tela cheia (F)">⛶</button>
-    </div>
-    </div>
-    <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-wrap gap-3 justify-between text-xs text-zinc-400">
-      <span>Cena: <strong id="scene-counter" class="text-zinc-200">0/0</strong> · 1920x1080</span>
-      <span class="flex items-center gap-2"><i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i> eSpeak · Whisper · PixiJS · WebAudio · 100% Client-Side</span>
-    </div>
-    <div class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-col gap-3">
-      <div class="flex flex-wrap gap-2 items-center">
-        <h2 class="text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="clapperboard" class="w-4 h-4"></i> Direção</h2>
-        <input id="video-title" data-persist class="inp flex-1 min-w-[160px] !p-2 text-xs" placeholder="Título do vídeo (opcional)">
-        <button id="btn-vary" disabled class="btn !py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="shuffle" class="w-4 h-4"></i> Variar</button>
-      </div>
-      <div class="grid grid-cols-12 gap-1 text-[10px] uppercase text-zinc-500 px-1"><span class="col-span-1 text-center">#</span><span class="col-span-3">Cena</span><span class="col-span-2">Layout</span><span class="col-span-2">Transição</span><span class="col-span-2">Tratamento</span><span class="col-span-2">Imagem</span></div>
-      <div id="scene-list" class="flex flex-col gap-1 max-h-72 overflow-y-auto text-[11px]"><span class="text-zinc-600 p-2">Manifeste um roteiro para editar as cenas.</span></div>
-    </div>
-    <div id="text-panel" class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-col gap-2 text-[11px] text-zinc-400">
-      <details open><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4"></i> Vinheta de Abertura</summary>
-        <div class="flex flex-col gap-2 mt-3">
-          <div class="flex flex-wrap gap-2 items-center">
-            <label class="flex items-center gap-2">Abertura ativa <select id="vig-active" data-persist class="inp !p-1.5 !w-auto text-[11px]"></select></label>
-            <button id="vig-new" class="px-3 py-1.5 rounded bg-purple-800 hover:bg-purple-700 text-white">+ Nova vinheta</button>
-            <button id="vig-prev" class="px-3 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white">▶ Prévia</button>
-          </div>
-          <div id="vig-form" class="hidden grid grid-cols-2 md:grid-cols-4 gap-2 border border-zinc-800 rounded-lg p-2">
-            <label class="flex flex-col gap-1 col-span-2 md:col-span-1">Editando<select id="vig-edit" class="inp !p-1.5 text-[11px]"></select></label>
-            <label class="flex flex-col gap-1">Nome<input id="vig-name" type="text" class="inp !p-1.5 text-[11px]"></label>
-            <label class="flex flex-col gap-1">Subtítulo<input id="vig-sub" type="text" class="inp !p-1.5 text-[11px]" placeholder="opcional"></label>
-            <label>Duração <span id="vig-dur-v" class="float-right text-purple-400">3s</span><input id="vig-dur" type="range" min="1" max="8" step=".5" value="3" class="w-full accent-purple-500"></label>
-            <label class="flex flex-col gap-1">Composição<select id="vig-tpl" class="inp !p-1.5 text-[11px]"></select></label>
-            <label class="flex flex-col gap-1">Som<select id="vig-snd" class="inp !p-1.5 text-[11px]"></select></label>
-            <label class="flex flex-col gap-1">Imagem/logo<input id="vig-img" type="file" accept="image/*" class="text-[10px]"></label>
-            <div class="flex items-end gap-2"><img id="vig-thumb" class="h-8 rounded hidden"><button id="vig-img-x" class="text-red-400 hidden">✕ imagem</button></div>
-            <div class="col-span-2 md:col-span-4 flex gap-2 justify-end">
-              <button id="vig-rand" class="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700">🎲 Sortear composição</button>
-              <button id="vig-del" class="px-3 py-1.5 rounded bg-red-900 hover:bg-red-800 text-white">Excluir</button>
-            </div>
-          </div>
+<div class="flex-1 min-h-0 flex">
+  <nav class="w-16 shrink-0 flex flex-col items-center gap-1 py-2 border-r border-zinc-900 bg-black/50 overflow-y-auto"><button data-tab="script" class="tab"><i data-lucide="file-text" class="w-5 h-5"></i><span>Roteiro</span></button><button data-tab="voice" class="tab"><i data-lucide="mic" class="w-5 h-5"></i><span>Voz</span></button><button data-tab="media" class="tab"><i data-lucide="image" class="w-5 h-5"></i><span>Mídia</span></button><button data-tab="audio" class="tab"><i data-lucide="music" class="w-5 h-5"></i><span>Áudio</span></button><button data-tab="text" class="tab"><i data-lucide="type" class="w-5 h-5"></i><span>Texto</span></button><button data-tab="style" class="tab"><i data-lucide="palette" class="w-5 h-5"></i><span>Estilo</span></button><button data-tab="intro" class="tab"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Abertura</span></button><button data-tab="outro" class="tab"><i data-lucide="list-end" class="w-5 h-5"></i><span>Final</span></button><button data-tab="brand" class="tab"><i data-lucide="stamp" class="w-5 h-5"></i><span>Marca</span></button></nav>
+  <aside id="text-panel" class="w-80 shrink-0 border-r border-zinc-900 bg-zinc-950/80 p-4 overflow-y-auto text-zinc-400">
+      <section data-pane="script" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="file-text" class="w-4 h-4"></i> Roteiro</h2>
+        <div class="flex justify-between items-center"><span class="text-zinc-500">Cada frase ou linha vira uma cena.</span><button id="btn-preset" class="text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Exemplo</button></div>
+        <textarea id="script-input" data-persist class="inp flex-1 min-h-[240px] text-emerald-300 resize-none leading-relaxed text-[13px]" placeholder="Escreva o roteiro..."></textarea>
+        <div class="flex justify-between text-zinc-500"><span id="char-count">0 caracteres</span><span>Ctrl+Enter gera a prévia</span></div>
+        <label class="row"><input type="checkbox" id="auto-gen" data-persist checked> Prévia automática ao parar de digitar</label>
+        <label class="row"><input type="checkbox" id="ai-sync" data-persist> Sincronia IA das legendas (Whisper · ~80MB no 1º uso)</label>
+      </section>
+      <section data-pane="voice" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="mic" class="w-4 h-4"></i> Voz</h2>
+        <label class="fl">Voz<select id="voice-select" data-persist class="inp"></select></label>
+        <label class="fl">Efeito<select id="effect-select" data-persist class="inp"></select></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label>Tom <span id="pitch-val" class="val">0</span><input type="range" id="voice-pitch" data-persist min="-12" max="12" value="0"></label>
+          <label>Velocidade <span id="rate-val" class="val">1</span><input type="range" id="voice-rate" data-persist min="0.6" max="1.6" step="0.05" value="1"></label>
         </div>
-      </details>
-      <details open class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="type" class="w-4 h-4"></i> Texto & Legendas</summary>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+        <button id="btn-test" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="volume-2" class="w-4 h-4"></i> Ouvir voz</button>
+      </section>
+      <section data-pane="media" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="image" class="w-4 h-4"></i> Mídia</h2>
+        <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Enviar imagens<input type="file" id="img-files" accept="image/*" multiple hidden></label>
+        <div id="img-grid" class="grid grid-cols-3 gap-1.5"></div>
+        <label class="fl">URLs (uma por linha · opcional: palavra | url)<textarea id="img-urls" data-persist class="inp h-20 text-[11px] text-zinc-300 resize-y" placeholder="chuva | https://..."></textarea></label>
+        <label class="row"><input type="checkbox" id="img-search" data-persist checked> Buscar imagens grátis p/ cenas sem imagem</label>
+        <label class="row"><input type="checkbox" id="img-clip" data-persist> Associação IA imagem↔frase (CLIP · ~90MB)</label>
+      </section>
+      <section data-pane="audio" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="music" class="w-4 h-4"></i> Áudio</h2>
+        <div class="flex items-center gap-2 bg-black/40 rounded-lg p-2"><span id="music-name" class="flex-1 truncate text-emerald-300">♪ Procedural (gerada pelo estilo)</span><button id="music-clear" class="hidden text-red-400">✕</button></div>
+        <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Enviar música<input type="file" id="music-file" accept="audio/*" hidden></label>
+        <div class="flex gap-2"><input id="music-q" class="inp flex-1 !p-2 text-[11px]" placeholder="Buscar trilha grátis (Openverse)"><button id="music-search" class="px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700"><i data-lucide="search" class="w-3 h-3"></i></button></div>
+        <div id="music-results" class="flex flex-col gap-1 max-h-48 overflow-y-auto"></div>
+        <label class="fl">Ambiente<select id="amb-select" data-persist class="inp"></select></label>
+        <label class="fl">Efeitos sonoros<select id="sfx-pack" data-persist class="inp"></select></label>
+        <label>Música <input type="range" id="vol-music" data-persist min="0" max="100" value="60"></label>
+        <label>Ambiente <input type="range" id="vol-amb" data-persist min="0" max="100" value="50"></label>
+        <label>Efeitos <input type="range" id="vol-sfx" data-persist min="0" max="100" value="70"></label>
+      </section>
+      <section data-pane="text" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="type" class="w-4 h-4"></i> Texto & Legendas</h2>
+        <div class="grid grid-cols-2 gap-2">
           <label class="flex flex-col gap-1">Modelo<select id="cap-style" data-persist class="inp !p-1.5 text-[11px]"></select></label>
           <label class="flex flex-col gap-1">Fonte legenda<select id="cap-font" data-persist class="inp !p-1.5 text-[11px]"></select></label>
           <label class="flex flex-col gap-1">Fonte títulos<select id="title-font" data-persist class="inp !p-1.5 text-[11px]"></select></label>
@@ -153,9 +84,49 @@
           <div class="flex items-center gap-2"><input type="color" id="col-text" data-persist value="#ffffff" class="w-8 h-7 bg-transparent" title="Cor do texto"><input type="color" id="col-accent" data-persist value="#00ff66" class="w-8 h-7 bg-transparent" title="Cor de destaque"><span>texto / destaque</span></div>
           <label class="flex items-center gap-2"><input type="checkbox" id="cap-off" data-persist class="accent-emerald-500"> Ocultar legendas e títulos</label>
         </div>
-      </details>
-      <details class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="stamp" class="w-4 h-4"></i> Marca d'água</summary>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+
+      </section>
+      <section data-pane="style" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="palette" class="w-4 h-4"></i> Estilo</h2>
+        <label class="fl">Dimensão estética<select id="style-select" data-persist class="inp"></select></label>
+        <label class="fl">Tratamento de imagem<select id="grade-select" data-persist class="inp"></select></label>
+      </section>
+      <section data-pane="intro" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="sparkles" class="w-4 h-4"></i> Vinheta de Abertura</h2>
+          <div class="flex flex-wrap gap-2 items-center">
+            <label class="flex items-center gap-2">Abertura ativa <select id="vig-active" data-persist class="inp !p-1.5 !w-auto text-[11px]"></select></label>
+            <button id="vig-new" class="px-3 py-1.5 rounded bg-purple-800 hover:bg-purple-700 text-white">+ Nova vinheta</button>
+            <button id="vig-prev" class="px-3 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white">▶ Prévia</button>
+          </div>
+          <div id="vig-form" class="hidden grid grid-cols-2 gap-2 border border-zinc-800 rounded-lg p-2">
+            <label class="flex flex-col gap-1 col-span-2">Editando<select id="vig-edit" class="inp !p-1.5 text-[11px]"></select></label>
+            <label class="flex flex-col gap-1">Nome<input id="vig-name" type="text" class="inp !p-1.5 text-[11px]"></label>
+            <label class="flex flex-col gap-1">Subtítulo<input id="vig-sub" type="text" class="inp !p-1.5 text-[11px]" placeholder="opcional"></label>
+            <label>Duração <span id="vig-dur-v" class="float-right text-purple-400">3s</span><input id="vig-dur" type="range" min="1" max="8" step=".5" value="3" class="w-full accent-purple-500"></label>
+            <label class="flex flex-col gap-1">Composição<select id="vig-tpl" class="inp !p-1.5 text-[11px]"></select></label>
+            <label class="flex flex-col gap-1">Som<select id="vig-snd" class="inp !p-1.5 text-[11px]"></select></label>
+            <label class="flex flex-col gap-1">Imagem/logo<input id="vig-img" type="file" accept="image/*" class="text-[10px]"></label>
+            <div class="flex items-end gap-2"><img id="vig-thumb" class="h-8 rounded hidden"><button id="vig-img-x" class="text-red-400 hidden">✕ imagem</button></div>
+            <div class="col-span-2 flex gap-2 justify-end">
+              <button id="vig-rand" class="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700">🎲 Sortear composição</button>
+              <button id="vig-del" class="px-3 py-1.5 rounded bg-red-900 hover:bg-red-800 text-white">Excluir</button>
+            </div>
+          </div>
+
+      </section>
+      <section data-pane="outro" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="list-end" class="w-4 h-4"></i> Encerramento</h2>
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap gap-3 items-center"><label class="flex items-center gap-2"><input type="checkbox" id="outro-on" data-persist checked class="accent-emerald-500"> Mostrar encerramento</label>
+          <label class="flex items-center gap-2"><input type="checkbox" id="outro-auto" data-persist checked class="accent-emerald-500"> Incluir créditos automáticos (voz, música, imagens)</label></div>
+          <input id="outro-title" data-persist type="text" class="inp !p-2 text-xs" value="FIM DA TRANSMISSÃO" placeholder="Título do encerramento">
+          <textarea id="outro-lines" data-persist class="inp h-20 text-[11px] resize-y" placeholder="Créditos (uma linha por item)&#10;Roteiro: Fulano&#10;Edição: S.Y.N.A.P.S.E"></textarea>
+        </div>
+
+      </section>
+      <section data-pane="brand" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="stamp" class="w-4 h-4"></i> Marca d'água</h2>
+        <div class="grid grid-cols-2 gap-2">
           <label class="flex flex-col gap-1">Tipo<select id="wm-type" data-persist class="inp !p-1.5 text-[11px]"><option value="none">Nenhuma</option><option value="text">Texto</option><option value="image">Imagem</option></select></label>
           <label class="flex flex-col gap-1">Texto<input id="wm-text" data-persist type="text" class="inp !p-1.5 text-[11px]" placeholder="@seucanal"></label>
           <label class="flex flex-col gap-1">Imagem (PNG)<input id="wm-file" type="file" accept="image/*" class="text-[10px]"></label>
@@ -163,19 +134,43 @@
           <label>Tamanho <span id="wm-size-v" class="float-right text-purple-400">12%</span><input type="range" id="wm-size" data-persist min="4" max="40" value="12" class="w-full accent-purple-500"></label>
           <label>Opacidade <span id="wm-op-v" class="float-right text-purple-400">60%</span><input type="range" id="wm-op" data-persist min="10" max="100" value="60" class="w-full accent-purple-500"></label>
         </div>
-      </details>
-      <details class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="list-end" class="w-4 h-4"></i> Encerramento</summary>
-        <div class="flex flex-col gap-2 mt-3">
-          <div class="flex flex-wrap gap-3 items-center"><label class="flex items-center gap-2"><input type="checkbox" id="outro-on" data-persist checked class="accent-emerald-500"> Mostrar encerramento</label>
-          <label class="flex items-center gap-2"><input type="checkbox" id="outro-auto" data-persist checked class="accent-emerald-500"> Incluir créditos automáticos (voz, música, imagens)</label></div>
-          <input id="outro-title" data-persist type="text" class="inp !p-2 text-xs" value="FIM DA TRANSMISSÃO" placeholder="Título do encerramento">
-          <textarea id="outro-lines" data-persist class="inp h-20 text-[11px] resize-y" placeholder="Créditos (uma linha por item)&#10;Roteiro: Fulano&#10;Edição: S.Y.N.A.P.S.E"></textarea>
-        </div>
-      </details>
+
+      </section>
+  </aside>
+  <main class="flex-1 min-w-0 flex flex-col">
+    <div id="stage" class="flex-1 min-h-0 flex flex-col items-center justify-center gap-2 p-3">
+      <div id="screen" class="relative aspect-video bg-black rounded-lg overflow-hidden border border-purple-900/40 shadow-2xl">
+        <canvas id="view-canvas" class="w-full h-full"></canvas>
+        <div class="absolute top-2 right-2 z-10 bg-black/60 px-2 py-1 rounded text-[10px] text-purple-400"><span id="scene-hash">HASH: 0x000000</span></div>
+      </div>
+      <div id="player-bar" class="flex items-center gap-2 text-zinc-300">
+        <button id="pl-back" class="pbtn" title="-5s"><i data-lucide="rewind" class="w-4 h-4"></i></button>
+        <button id="pl-play" class="w-10 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white" title="Play/Pausa (espaço)">▶</button>
+        <button id="pl-fwd" class="pbtn" title="+5s"><i data-lucide="fast-forward" class="w-4 h-4"></i></button>
+        <span id="pl-time" class="text-xs w-24 text-center tabular-nums">0:00 / 0:00</span>
+        <span class="text-[11px] text-zinc-500">Cena <b id="scene-counter" class="text-zinc-300">0/0</b></span>
+        <div class="relative flex-1 hidden"><input type="range" id="pl-seek" min="0" max="0" step="0.01" value="0"><div id="pl-marks"></div></div>
+        <button id="pl-full" class="pbtn" title="Tela cheia (F)"><i data-lucide="maximize" class="w-4 h-4"></i></button>
+      </div>
     </div>
-  </section>
-</main>
-<footer class="border-t border-zinc-900 bg-black/40 p-3 text-center text-xs text-zinc-600">S.Y.N.A.P.S.E © 2026 · Processamento local.</footer>
+  </main>
+  <aside id="inspector" class="w-72 shrink-0 border-l border-zinc-900 bg-zinc-950/80 p-4 overflow-y-auto text-zinc-400 hidden xl:block">
+    <h2 class="pane-h"><i data-lucide="sliders-horizontal" class="w-4 h-4"></i> Cena</h2>
+    <div id="insp-body" class="flex flex-col gap-3 mt-3"><p class="text-zinc-600">Gere a prévia e clique numa cena da timeline para editá-la.</p></div>
+  </aside>
+</div>
+<section id="timeline" class="h-48 shrink-0 border-t border-purple-900/40 bg-black/70 flex flex-col">
+  <div class="h-8 flex items-center gap-3 px-3 border-b border-zinc-900 text-[11px] text-zinc-500">
+    <i data-lucide="gantt-chart" class="w-4 h-4 text-purple-400"></i> Timeline
+    <span class="flex-1"></span> Zoom <input type="range" id="tl-zoom" min="1" max="8" step="0.5" value="1" class="!w-28">
+  </div>
+  <div id="tl-scroll" class="flex-1 min-h-0 overflow-x-auto overflow-y-hidden flex">
+    <div class="w-20 shrink-0 flex flex-col text-[10px] text-zinc-500 border-r border-zinc-900 bg-black/60 sticky left-0 z-20">
+      <div class="h-5"></div><div class="tl-lab">Cenas</div><div class="tl-lab">Voz</div><div class="tl-lab">Legendas</div><div class="tl-lab">Áudio</div>
+    </div>
+    <div id="tl-inner" class="relative flex-1 min-w-full"></div>
+  </div>
+</section>
 <script>lucide.createIcons()</script>
 <script type="module" src="js/main.js"></script>
 </body>
