@@ -23,18 +23,34 @@ export const parseUrls = t => t.split('\n').map(l => l.trim()).filter(Boolean)
 const hit = (tag, text) => { const t = norm(tag); return t.length > 2 && text.split(/\s+/).some(w => { w = norm(w); return w.length > 2 && (w.startsWith(t) || t.startsWith(w)); }); };
 
 // imagens por cena: tag -> busca -> CLIP/distribuição
-export async function plan(tl, { search, clip, onStatus }) {
-  const P = tl.map(() => []), used = new Set();
+// assunto geral: palavras-chave mais frequentes no roteiro
+export function topicOf(tl) {
+  const c = {};
+  tl.forEach(s => keywords(s.text, 4).forEach(k => { const n = norm(k).slice(0, 6); c[n] = c[n] || [k, 0]; c[n][1]++; }));
+  return Object.values(c).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).slice(0, 2).map(x => x[0]).join(' ');
+}
+export const autoQuery = text => keywords(text, 2).join(' ');
+export const CANDS = {}; // candidatas por cena: { q, list }
+
+// busca e devolve candidatas ranqueadas para uma cena (com cache)
+export async function searchScene(i, q, topic, ar) {
+  if (CANDS[i]?.q === q) return CANDS[i].list;
+  let list = await searchImages({ q, topic }, ar).catch(() => []);
+  if (!list.length && q.includes(' ')) list = await searchImages({ q: q.split(' ')[0], topic }, ar).catch(() => []);
+  CANDS[i] = { q, list }; return list;
+}
+
+export async function plan(tl, { search, clip, onStatus, ar = 16 / 9, queries = [] }) {
+  const P = tl.map(() => []), used = new Set(), topic = topicOf(tl);
   for (const a of assets) if (a.tag && a.origin !== 'search') tl.forEach((s, i) => hit(a.tag, s.text) && (P[i].push(a), used.add(a)));
 
   if (search) for (const [i, s] of tl.entries()) {
     if (P[i].length) continue;
     onStatus?.(`BUSCANDO IMAGENS ${i + 1}/${tl.length}`);
-    out: for (const kw of keywords(s.text, 3)) {
-      for (const r of (await searchImages(kw).catch(() => [])).slice(0, 4)) {
-        if (assets.some(x => x.src === r.src && used.has(x))) continue;
-        try { const a = await addAsset({ ...r, tag: kw, origin: 'search' }); P[i].push(a); used.add(a); break out; } catch { }
-      }
+    const q = queries[i] || autoQuery(s.text);
+    for (const r of (await searchScene(i, q, topic, ar)).slice(0, 5)) {
+      if (assets.some(x => x.src === r.src && used.has(x))) continue;
+      try { const a = await addAsset({ src: r.src, credit: r.credit, tag: q, origin: 'search' }); P[i].push(a); used.add(a); break; } catch { }
     }
   }
 

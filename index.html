@@ -67,6 +67,9 @@
         <label class="fl">URLs (uma por linha · opcional: palavra | url)<textarea id="img-urls" data-persist class="inp h-20 text-[11px] text-zinc-300 resize-y" placeholder="chuva | https://..."></textarea></label>
         <label class="row"><input type="checkbox" id="img-search" data-persist checked> Buscar imagens grátis p/ cenas sem imagem</label>
         <label class="row"><input type="checkbox" id="img-clip" data-persist> Associação IA imagem↔frase (CLIP · ~90MB)</label>
+        <details class="bg-black/30 rounded-lg p-2 border border-zinc-800"><summary class="cursor-pointer text-zinc-300">Fontes de imagem <span id="src-count" class="text-emerald-400"></span></summary>
+          <p class="text-zinc-500 my-2 leading-relaxed">Pexels, Unsplash e Pixabay são mais certeiras e pedem uma chave grátis (fica salva só neste navegador). Wikimedia e Openverse funcionam sem chave.</p>
+          <div id="src-cfg" class="flex flex-col gap-2"></div></details>
       </section>
       <section data-pane="audio" class="pane hidden flex-col gap-3">
         <h2 class="pane-h"><i data-lucide="music" class="w-4 h-4"></i> Áudio</h2>

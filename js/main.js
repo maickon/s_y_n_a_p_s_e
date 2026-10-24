@@ -21,7 +21,9 @@ import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
 import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
 import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
-import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
+import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS } from './core/assets.js';
+import { PROVIDERS, setConfig, active as activeSrc } from './media/search.js';
+import { loadImage } from './media/loader.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
@@ -92,6 +94,8 @@ async function render() {
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
     musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+  // descarta resultados de busca automática que não estão mais em uso
+  assets.filter(x => x.origin === 'search' && !P.some(l => l.includes(x)) && !ov.some(o => o?.img === x)).forEach(removeAsset);
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
@@ -118,7 +122,7 @@ function generate() {
     await syncUrls();
     const texts = track.timeline.map(s => s.text), R = restored && restored.texts?.join('\n') === texts.join('\n') ? restored : null;
     if (R) { P = R.P.map(l => l.map(id => assets.find(a => a.id === id)).filter(Boolean)); variation = R.variation || 0; ov = (R.ov || []).map(o => o && { ...o, img: o.img && assets.find(a => a.id === o.img) }); }
-    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
+    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q) });
     if (!R) { variation = 0; ov = []; }
     restored = null;
     await render();
@@ -135,7 +139,7 @@ async function flush() {
   const lv = pend; pend = 0;
   await run(async () => {
     if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline, capMax()); }
-    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') }); }
+    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q) }); }
     await render();
   });
 }
@@ -195,7 +199,7 @@ function grid(P = []) {
     d.className = 'relative aspect-video rounded overflow-hidden border border-zinc-700 group cursor-pointer hover:border-emerald-400';
     d.title = [a.tag, a.credit].filter(Boolean).join(' · ');
     d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span><button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
-    d.querySelector('img').onclick = () => goTo(a.img);
+    d.querySelector('img').onclick = () => editAsset(a);
     d.querySelector('button').onclick = () => {
       removeAsset(a); live(3); if (a.origin === 'file') saveFiles();
       if (a.origin === 'url') $('img-urls').value = $('img-urls').value.split('\n').filter(l => !l.includes(a.src)).join('\n');
@@ -259,7 +263,7 @@ document.addEventListener('keydown', e => {
 });
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
-window.synapse = { get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
+window.synapse = { assets, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
@@ -331,12 +335,31 @@ function inspector() {
     <div class="fl">Imagem <span class="text-zinc-600">(clique para trocar)</span><div class="grid grid-cols-3 gap-1.5">
       <div data-img="" class="tile ${!o.img ? 'on' : ''} flex items-center justify-center text-[10px]">Auto</div>
       ${assets.map((a, k) => `<div data-img="${k}" class="tile ${o.img === a ? 'on' : !o.img && a === cur ? 'on' : ''}" title="${escH(a.tag || a.origin)}" style="background-image:url('${a.img.src}')"></div>`).join('')}</div></div>
+    <div class="fl">Buscar imagem para esta cena<div class="flex gap-1.5"><input data-q class="inp !p-1.5 text-[11px]" value="${escH(o.q || CANDS[i]?.q || autoQuery(s.text))}"><button data-search class="pbtn bg-zinc-800" title="Buscar"><i data-lucide="search" class="w-4 h-4"></i></button></div>
+      <div data-cands class="grid grid-cols-3 gap-1.5"></div></div>
     <button data-go class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="play" class="w-4 h-4"></i> Ir para a cena</button>`;
   const set = (k, v) => { ov[i] = { ...ov[i], [k]: v }; live(2); };
   b.querySelectorAll('select').forEach(x => x.onchange = () => set(x.dataset.k, x.value || undefined));
   b.querySelectorAll('[data-img]').forEach(x => x.onclick = () => { set('img', x.dataset.img === '' ? undefined : assets[x.dataset.img]); b.querySelectorAll('[data-img]').forEach(y => y.classList.toggle('on', y === x)); });
   b.querySelectorAll('[data-nav]').forEach(x => x.onclick = () => selectScene(i + +x.dataset.nav, true));
   b.querySelector('[data-go]').onclick = () => selectScene(i, true);
+  // candidatas da busca: clique usa a imagem na cena
+  const cands = b.querySelector('[data-cands]'), showC = l => {
+    cands.innerHTML = l.length ? l.slice(0, 12).map((c, k) => `<div data-c="${k}" class="tile ${cur?.src === c.src ? 'on' : ''}" title="${escH(c.credit)}" style="background-image:url('${c.thumb}')"></div>`).join('') : '<span class="col-span-3 text-zinc-600">Nenhum resultado. Tente outro termo ou ative mais fontes na aba Mídia.</span>';
+    cands.querySelectorAll('[data-c]').forEach(x => x.onclick = async () => {
+      const c = l[x.dataset.c]; x.classList.add('opacity-50');
+      try { const a = await addAsset({ src: c.src, credit: c.credit, tag: b.querySelector('[data-q]').value, origin: 'search' }); set('img', a); grid(P); } catch { warn('Não foi possível carregar essa imagem. Escolha outra.'); }
+      x.classList.remove('opacity-50');
+    });
+  };
+  if (CANDS[i]?.list) showC(CANDS[i].list);
+  const doSearch = async () => {
+    const q = b.querySelector('[data-q]').value.trim(); if (!q) return;
+    cands.innerHTML = '<span class="col-span-3 text-zinc-500">Buscando...</span>';
+    ov[i] = { ...ov[i], q }; showC(await searchScene(i, q, topicOf(track.timeline), VW / VH));
+  };
+  b.querySelector('[data-search]').onclick = doSearch;
+  b.querySelector('[data-q]').onkeydown = e => e.key === 'Enter' && doSearch();
   lucide.createIcons({ root: b }); enhanceSelects(b);
 }
 const tl = createTimeline($('tl-inner'), $('tl-scroll'), { onSeek: t => pl.seek(t), onSelect: i => selectScene(i) });
@@ -487,6 +510,68 @@ let lastGen = '', genT;
 const gen = () => { if (busy) return genT = setTimeout(gen, 800); if (el.txt.value.trim() && el.txt.value !== lastGen) { lastGen = el.txt.value; generate(); } };
 el.txt.addEventListener('input', () => { clearTimeout(genT); if ($('auto-gen').checked) genT = setTimeout(gen, 1800); });
 el.txt.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); lastGen = el.txt.value; generate(); } });
+
+// --- Modal de edição de imagem: trocar URL/arquivo, palavra-chave, ver no vídeo, remover ---
+function editAsset(a) {
+  const used = P.map((l, i) => l.includes(a) || ov[i]?.img === a ? i + 1 : 0).filter(Boolean);
+  const o = document.createElement('div');
+  o.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4';
+  o.innerHTML = `<div class="w-full max-w-lg bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-5 flex flex-col gap-3 text-zinc-300">
+    <div class="flex items-center"><h3 class="pane-h flex-1"><i data-lucide="image" class="w-4 h-4"></i> Editar imagem</h3><button data-x class="pbtn">✕</button></div>
+    <div class="aspect-video rounded-lg bg-black bg-center bg-contain bg-no-repeat border border-zinc-800" data-prev style="background-image:url('${a.img.src}')"></div>
+    <div class="text-[11px] text-zinc-500">${escH(a.credit || (a.origin === 'file' ? 'Arquivo enviado' : a.origin === 'search' ? 'Busca automática' : 'URL'))} · ${used.length ? 'usada na(s) cena(s) ' + used.join(', ') : 'não usada no momento'}</div>
+    <label class="fl">Palavra-chave (liga a imagem à cena que contém a palavra)<input data-tag class="inp !p-2" value="${escH(a.tag || '')}"></label>
+    <label class="fl">Trocar pela URL<div class="flex gap-2"><input data-url class="inp !p-2 text-[11px]" placeholder="https://..." value="${a.origin === 'file' ? '' : escH(a.src)}"><button data-load class="pbtn bg-zinc-800" title="Pré-visualizar"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button></div></label>
+    <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Ou trocar por um arquivo<input data-file type="file" accept="image/*" hidden></label>
+    <div class="flex gap-2 justify-between mt-1">
+      <button data-del class="btn bg-red-900 hover:bg-red-800 text-white"><i data-lucide="trash-2" class="w-4 h-4"></i> Remover</button>
+      <div class="flex gap-2"><button data-go class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200" ${used.length ? '' : 'disabled'}><i data-lucide="play" class="w-4 h-4"></i> Ver no vídeo</button>
+      <button data-save class="btn bg-purple-700 hover:bg-purple-600 text-white"><i data-lucide="check" class="w-4 h-4"></i> Salvar</button></div></div></div>`;
+  document.body.appendChild(o); lucide.createIcons();
+  let next = null; // { src, img, blob }
+  const prev = x => o.querySelector('[data-prev]').style.backgroundImage = `url('${x}')`, close = () => o.remove();
+  o.querySelector('[data-load]').onclick = async () => {
+    const u = o.querySelector('[data-url]').value.trim(); if (!/^https?:\/\//.test(u)) return warn('Informe uma URL começando com http(s)://');
+    try { next = { src: u, img: await loadImage(u) }; prev(next.img.src); } catch { warn('Não foi possível carregar a imagem dessa URL.'); }
+  };
+  o.querySelector('[data-file]').onchange = async e => { const f = e.target.files[0]; if (!f) return; const u = URL.createObjectURL(f); next = { src: u, img: await loadImage(u), blob: f }; prev(u); };
+  o.onclick = e => (e.target === o || e.target.closest('[data-x]')) && close();
+  o.querySelector('[data-go]').onclick = () => { close(); goTo(a.img); };
+  o.querySelector('[data-del]').onclick = async () => {
+    if (!await ask('Remover esta imagem do projeto?')) return;
+    removeAsset(a); if (a.origin === 'file') saveFiles();
+    if (a.origin === 'url') $('img-urls').value = $('img-urls').value.split('\n').filter(l => !l.includes(a.src)).join('\n');
+    ov.forEach(x => x?.img === a && delete x.img); P = P.map(l => l.filter(x => x !== a));
+    close(); grid(P); live(2);
+  };
+  o.querySelector('[data-save]').onclick = async () => {
+    const u = o.querySelector('[data-url]').value.trim(), tag = o.querySelector('[data-tag]').value.trim();
+    if (!next && u && u !== a.src && a.origin !== 'file') { try { next = { src: u, img: await loadImage(u) }; } catch { return warn('Não foi possível carregar a imagem dessa URL.'); } }
+    const oldSrc = a.src, wasUrl = a.origin === 'url';
+    if (next) { Object.assign(a, { src: next.src, img: next.img, credit: '' }); a.blob = next.blob; a.origin = next.blob ? 'file' : wasUrl ? 'url' : 'custom'; }
+    a.tag = tag;
+    // mantém a lista de URLs sincronizada
+    if (wasUrl) { const L = $('img-urls').value.split('\n'), k = L.findIndex(l => l.includes(oldSrc)); const line = a.origin === 'url' ? (tag ? `${tag} | ${a.src}` : a.src) : null; if (k >= 0) line ? L[k] = line : L.splice(k, 1); $('img-urls').value = L.join('\n'); $('img-urls').dispatchEvent(new Event('input')); }
+    saveFiles(); close(); grid(P); live(next ? 2 : 3);
+  };
+}
+
+// --- Fontes de imagem (chaves grátis ficam só neste navegador) ---
+let imgCfg = await store.get('imgcfg') || { keys: {}, off: {} };
+setConfig(imgCfg);
+function srcUI() {
+  $('src-cfg').innerHTML = Object.entries(PROVIDERS).map(([k, p]) => `<div class="flex flex-col gap-1 bg-zinc-900/60 rounded-lg p-2">
+    <label class="row justify-between"><span class="text-zinc-200">${p.n}</span><input type="checkbox" data-on="${k}" ${imgCfg.off[k] ? '' : 'checked'}></label>
+    ${p.key ? `<div class="flex gap-1.5 items-center"><input data-key="${k}" type="password" class="inp !p-1.5 text-[11px]" placeholder="Chave da API" value="${escH(imgCfg.keys[k] || '')}"><a href="${p.url}" target="_blank" rel="noopener" class="text-emerald-400 whitespace-nowrap hover:underline">obter grátis</a></div>` : ''}</div>`).join('');
+  $('src-count').textContent = `(${activeSrc().length} ativas)`;
+}
+$('src-cfg').addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.on) imgCfg.off[t.dataset.on] = !t.checked;
+  if (t.dataset.key) imgCfg.keys[t.dataset.key] = t.value.trim();
+  setConfig(imgCfg); store.set('imgcfg', imgCfg); srcUI(); Object.keys(CANDS).forEach(k => delete CANDS[k]);
+});
+srcUI();
 
 // --- Projetos: autosave do espaço de trabalho + gerenciador ---
 let curId = await store.get('curProject');
