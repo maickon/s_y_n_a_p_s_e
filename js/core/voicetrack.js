@@ -1,24 +1,28 @@
 import { speak } from '../tts/mespeak.js';
 import { applyFx, VOICES } from '../audio/fx.js';
+import { estimate } from './words.js';
 
-// Gera a trilha de voz completa + tempos de cada cena
+// Gera a trilha de voz (com FX e seca) + tempos de cena/palavra
 export async function buildVoiceTrack(scenes, { preset, pitch, speed, gap = .45, onProgress }) {
   const P = VOICES[preset], bufs = [];
   for (const [i, s] of scenes.entries()) {
     onProgress?.(i, scenes.length);
     const dry = await speak(s, { variant: P.v, pitch: Math.max(0, pitch + (P.p || 0)), speed });
-    bufs.push([await applyFx(dry, P.fx), dry.length]);
+    bufs.push([await applyFx(dry, P.fx), dry]);
   }
   const sr = bufs[0][0].sampleRate, G = Math.round(gap * sr), lead = Math.round(.3 * sr);
-  const len = lead + bufs.reduce((a, [b, n]) => a + n + G, 0) + bufs.at(-1)[0].length - bufs.at(-1)[1];
-  const out = new AudioBuffer({ length: len, sampleRate: sr, numberOfChannels: 1 }), d = out.getChannelData(0);
   let o = lead;
+  const pos = bufs.map(([, d]) => (o += d.length + G) - d.length - G);
+  const len = Math.max(...bufs.map(([b], i) => pos[i] + b.length));
+  const mk = () => new AudioBuffer({ length: len, sampleRate: sr, numberOfChannels: 1 });
+  const out = mk(), dry = mk(), d = out.getChannelData(0), dd = dry.getChannelData(0);
   // cauda (reverb) sobrepõe a pausa seguinte
-  const timeline = bufs.map(([b, n], i) => {
-    b.getChannelData(0).forEach((v, j) => d[o + j] += v);
-    const t = { text: scenes[i], start: o / sr, end: (o + n) / sr };
-    o += n + G;
-    return t;
+  const timeline = bufs.map(([b, dr], i) => {
+    b.getChannelData(0).forEach((v, j) => d[pos[i] + j] += v);
+    dd.set(dr.getChannelData(0), pos[i]);
+    const sc = { text: scenes[i], start: pos[i] / sr, end: (pos[i] + dr.length) / sr };
+    sc.words = estimate(sc, dd, sr);
+    return sc;
   });
-  return { buffer: out, timeline, duration: len / sr };
+  return { buffer: out, dry, timeline, duration: len / sr };
 }

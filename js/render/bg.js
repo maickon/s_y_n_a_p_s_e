@@ -18,12 +18,12 @@ void main(){vec2 uv=vUv;
  if(glitch>.01)c.r=mix(c.r,c.g,glitch*.5);
  gl_FragColor=vec4(c,1);}`;
 
-export function createBg(canvas) {
-  const r = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+export function createBg() {
+  const canvas = document.createElement('canvas'), r = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
   r.setSize(1280, 720, false);
   const u = { t: { value: 0 }, seed: { value: 0 }, glitch: { value: 0 }, style: { value: 0 } };
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: u, fragmentShader: frag,
     vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position,1);}' })));
-  return { u, draw: () => r.render(scene, cam) };
+  return { u, canvas, draw: () => r.render(scene, cam) };
 }
