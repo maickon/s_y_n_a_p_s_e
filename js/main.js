@@ -16,7 +16,7 @@ import { createCompositor } from './render/compositor.js';
 import { exportMP4 } from './export/mp4.js';
 import { exportHyperFrames } from './export/hyperframes.js';
 import { direct, INTRO } from './core/direct.js';
-import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES } from './render/layouts.js';
+import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES, setAspect, W as VW, H as VH } from './render/layouts.js';
 import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
 import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
@@ -36,7 +36,7 @@ Esquecemos o som da chuva antes da entropia final.
 Sua consciência foi transcrita com sucesso no servidor do nada.`;
 
 const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-select'), pitch: $('voice-pitch'), rate: $('voice-rate') };
-const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
+let cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
 let ctx, rec, track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
@@ -75,6 +75,7 @@ async function run(fn) {
   busy = true; ['btn-manifest', 'btn-vary', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
+  if (pendingGen) { pendingGen = false; setTimeout(() => $('btn-manifest').click()); }
   if (mix) ['btn-vary', ...EXP].forEach(b => enable($(b), true));
 }
 
@@ -97,7 +98,9 @@ async function render() {
   status('PREVIEW PRONTO', 'bg-emerald-500');
 }
 
+let pendingGen = false;
 $('btn-manifest').onclick = () => {
+  if (busy) return pendingGen = true;
   const scenes = splitScenes(el.txt.value);
   if (!scenes.length) return warn('Digite um roteiro válido.');
   run(async () => {
@@ -108,7 +111,7 @@ $('btn-manifest').onclick = () => {
       status('WHISPER: ALINHANDO...', 'bg-yellow-400 animate-pulse');
       track.timeline = align(track.timeline, asr);
     } catch (e) { console.warn('Whisper indisponível, usando estimativa', e); }
-    caps = groups(track.timeline);
+    caps = groups(track.timeline, capMax());
     await syncUrls();
     P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') });
     variation = 0; ov = [];
@@ -125,7 +128,7 @@ async function flush() {
   if (busy) return liveT = setTimeout(flush, 300);
   const lv = pend; pend = 0;
   await run(async () => {
-    if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline); }
+    if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline, capMax()); }
     if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') }); }
     await render();
   });
@@ -147,14 +150,14 @@ function drawAt(t) {
 }
 
 $('btn-mp4').onclick = () => mix && run(async () => {
-  const [h, fps] = $('mp4-q').value.split('p').map(Number), out = h === 1080 ? cv : Object.assign(document.createElement('canvas'), { width: 1280, height: 720 }), og = out !== cv ? out.getContext('2d') : null;
+  const [h, fps] = $('mp4-q').value.split('p').map(Number), k = h / 1080, out = h === 1080 ? cv : Object.assign(document.createElement('canvas'), { width: Math.round(cv.width * k / 2) * 2, height: Math.round(cv.height * k / 2) * 2 }), og = out !== cv ? out.getContext('2d') : null;
   const was = pl.time, m = progress({ title: `Exportando MP4 ${h}p${fps}`, source: cv });
   pl.pause();
   try {
     const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: mix, duration: mix.duration, fps, cancelled: () => m.cancelled,
-      draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, 1280, 720); },
+      draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, out.width, out.height); },
       onProgress: (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`) });
-    download(blob, `SYNAPSE_${h}p${fps}_${Date.now()}.mp4`);
+    download(blob, `SYNAPSE_${$('aspect').value.replace(':', 'x')}_${h}p${fps}_${Date.now()}.mp4`);
     status(`MP4 PRONTO · ${vc.toUpperCase()}/${(ac || 'sem áudio').toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
   } catch (e) { if (e.message !== 'CANCELADO') throw e; status('EXPORTAÇÃO CANCELADA', 'bg-zinc-600'); }
   finally { m.close(); pl.seek(was); }
@@ -250,7 +253,7 @@ document.addEventListener('keydown', e => {
 });
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
-window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
+window.synapse = { get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
@@ -366,7 +369,7 @@ function shiftTrack(L) {
   const mv = b => { const o = new AudioBuffer({ length: Math.max(1, b.length + n), sampleRate: sr, numberOfChannels: b.numberOfChannels }); for (let c = 0; c < b.numberOfChannels; c++) n >= 0 ? o.getChannelData(c).set(b.getChannelData(c), n) : o.getChannelData(c).set(b.getChannelData(c).subarray(-n)); return o; };
   track.buffer = mv(track.buffer); track.dry = mv(track.dry);
   track.timeline.forEach(s => { s.start += d; s.end += d; s.words.forEach(w => { w.s += d; w.e += d; }); });
-  track.duration += d; track.lead = L; caps = groups(track.timeline);
+  track.duration += d; track.lead = L; caps = groups(track.timeline, capMax());
 }
 $('vig-tpl').innerHTML = Object.entries(VIG_TPL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 $('vig-snd').innerHTML = Object.entries(VIG_SND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -447,6 +450,27 @@ $('music-play').onclick = async () => {
   try { audition(music?.buf ? clip(music.buf) : await previewMusic($('music-prof').value === 'auto' ? STYLES[el.style.selectedIndex].mus : +$('music-prof').value), b); } finally { b.classList.remove('loading'); }
 };
 
+// --- Formato do vídeo (16:9, 9:16, 1:1): recria o compositor nas novas dimensões ---
+const capMax = () => VH > VW ? 18 : VH === VW ? 22 : 30;
+async function applyAspect() {
+  const a = $('aspect').value;
+  document.querySelectorAll('.asp').forEach(b => b.classList.toggle('on', b.dataset.a === a));
+  setAspect(a);
+  const sc = $('screen'), r = VW / VH;
+  sc.style.aspectRatio = `${VW}/${VH}`; sc.style.setProperty('--ar', r);
+  if (cv.width === VW * 1.5 && cv.height === VH * 1.5) return;
+  comp.destroy(); bg.dispose();
+  cv = Object.assign(document.createElement('canvas'), { id: 'view-canvas', className: 'w-full h-full' }); sc.prepend(cv);
+  bg = createBg(VW, VH); comp = await createCompositor(cv, bg.canvas);
+  if (track) { caps = groups(track.timeline, capMax()); comp.load(segsCur); }
+  drawAt(pl.time);
+}
+document.querySelectorAll('.asp').forEach(b => b.onclick = async () => {
+  if (busy || $('aspect').value === b.dataset.a) return;
+  $('aspect').value = b.dataset.a; $('aspect').dispatchEvent(new Event('change'));
+  await applyAspect(); live(2);
+});
+
 // --- Abas do painel, menu de exportação, prévia automática ---
 const showTab = k => { document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === k)); document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === k)); store.set('tab', k); };
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
@@ -463,6 +487,7 @@ const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '')
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
 await store.bindForm(() => {
   vigUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+await applyAspect();
 galleries(); enhance(); tooltips();
 await setWm(await store.get('wm')).catch(() => { });
 readText();

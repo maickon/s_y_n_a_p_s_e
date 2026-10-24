@@ -24,9 +24,9 @@ body{font-family:'Fira Code',monospace;background:#050508;color:#d1d5db;overflow
 .tab{width:54px;padding:.45rem 0;border-radius:.6rem;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:9.5px;color:#71717a;transition:.15s}
 .tab:hover{color:#e4e4e7;background:#18181b}.tab.on{color:#34d399;background:rgba(16,185,129,.12)}
 .pbtn{padding:.4rem;border-radius:.5rem;transition:.15s}.pbtn:hover{background:#27272a}
-#screen{width:min(100%,calc((100vh - 330px)*16/9))}
+#screen{width:min(100%,calc((100vh - 330px)*var(--ar,1.7778)))}
 #player-bar{width:min(100%,calc((100vh - 330px)*16/9))}
-#stage:fullscreen{background:#000}#stage:fullscreen #screen,#stage:fullscreen #player-bar{width:min(100%,calc((100vh - 70px)*16/9))}
+#stage:fullscreen{background:#000}#stage:fullscreen #screen{width:min(100%,calc((100vh - 70px)*var(--ar,1.7778)))}#stage:fullscreen #player-bar{width:min(100%,calc((100vh - 70px)*16/9))}
 .tl-lab{height:30px;display:flex;align-items:center;padding-left:8px;border-bottom:1px solid #18181b}
 .tl-row{position:relative;height:30px;border-bottom:1px solid #18181b}.tl-ruler{height:20px}
 .tl-tick{position:absolute;top:0;height:100%;border-left:1px solid #27272a;padding-left:3px;font-size:9px;color:#52525b}
@@ -73,3 +73,4 @@ input[type=checkbox]:checked{background:#059669}input[type=checkbox]:checked::af
 .cgrp{padding:8px 10px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#71717a}
 .cswatch{width:28px;height:24px;border-radius:6px;border:2px solid #3f3f46;cursor:pointer;flex:none}.cswatch:hover{border-color:#a855f7}
 .ctip{position:fixed;z-index:300;pointer-events:none;background:#0c0a12;border:1px solid #6b21a8;color:#e4e4e7;font-size:11px;padding:4px 8px;border-radius:6px;opacity:0;transition:opacity .12s;max-width:280px}.ctip.on{opacity:1}
+.asp{display:flex;align-items:center;gap:5px;padding:6px 10px;color:#71717a;background:#0c0a12}.asp:hover{color:#e4e4e7}.asp.on{color:#34d399;background:rgba(16,185,129,.12)}

@@ -2,7 +2,12 @@ import { Container, Sprite, Texture, Graphics, BlurFilter, ColorMatrixFilter, Di
 import { rng } from '../core/script.js';
 import { GlitchFilter, RGBSplitFilter, ZoomBlurFilter, PixelateFilter, DropShadowFilter, OldFilmFilter, AdvancedBloomFilter, DotFilter, TiltShiftFilter, MotionBlurFilter } from 'pixi-filters';
 
-export const W = 1280, H = 720, T = .7; // T = duração da transição
+// dimensões lógicas (render interno = ×1.5); mudam com o formato do vídeo
+export let W = 1280, H = 720;
+export const T = .7; // duração da transição
+export const ASPECTS = { '16:9': [1280, 720], '9:16': [720, 1280], '1:1': [720, 720] };
+export const setAspect = a => [W, H] = ASPECTS[a] || ASPECTS['16:9'];
+const tall = () => H > W;
 export const cl = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - cl(x)) ** 3, io = x => (x = cl(x), x < .5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
 
 // ---------- texturas ----------
@@ -45,7 +50,7 @@ const LAYOUTS = {
   vignette(c, s, r) { const a = spr(tex(s.img), c), v = spr(vign(), c); v.position.set(W / 2, H / 2); v.scale.set(W * 1.15 / 512, H * 1.25 / 512); return p => { a.scale.set(cover(a) * (1.05 + .12 * p)); a.position.set(W / 2 + r.dx * 30 * p, H / 2); }; },
   spotlight(c, s, r) {
     const a = spr(tex(s.img), c), l = spr(radial([[0, 'rgba(0,0,0,0)'], [.35, 'rgba(0,0,0,0)'], [.7, 'rgba(0,0,0,.85)'], [1, 'rgba(0,0,0,.92)']], 'spot'), c);
-    a.position.set(W / 2, H / 2); l.scale.set(W * 2.6 / 512);
+    a.position.set(W / 2, H / 2); l.scale.set(Math.max(W, H) * 2.6 / 512);
     return p => { a.scale.set(cover(a) * (1.08 + .06 * p)); l.position.set(W * (.5 + r.dx * .25 * Math.cos(p * Math.PI)), H * (.5 + .12 * Math.sin(p * 4))); };
   },
   frame(c, s, r) { const bg = blurBg(s.img, c), k = card(c, s.img, W * .72, H * .72, 8); return p => { k.position.set(W / 2 + r.dx * 30 * (p - .5), H / 2 - 10); k.rotation = r.rot * .035 * (1 - p * 2); k.scale.set(1 + .06 * p); bg.x = W / 2 - r.dx * 20 * p; }; },
@@ -58,24 +63,33 @@ const LAYOUTS = {
   parallax(c, s, r) { const bg = blurBg(s.img, c), k = card(c, s.img, W * .66, H * .66, 0); return p => { bg.x = W / 2 + r.dx * 60 * (.5 - p); k.position.set(W / 2 + r.dx * 50 * (p - .5), H / 2); k.scale.set(1 + .1 * p); }; },
   window(c, s, r) {
     blurBg(s.img, c);
-    const w = W * .52, h = H * .7, x0 = r.side ? W * .05 : W * .43, a = masked(c, s.img, g => g.roundRect(x0, (H - h) / 2, w, h, 18));
-    c.addChild(new Graphics().roundRect(x0, (H - h) / 2, w, h, 18).stroke({ width: 2, color: 0xffffff, alpha: .6 }));
-    return p => { a.scale.set(cover(a, w, h) * (1.06 + .12 * p)); a.position.set(x0 + w / 2 + r.dx * 20 * p, H / 2); };
+    const T_ = tall(), w = T_ ? W * .86 : W * .52, h = T_ ? H * .5 : H * .7, x0 = T_ ? (W - w) / 2 : r.side ? W * .05 : W * .43, y0 = T_ ? (r.side ? H * .08 : H * .42) : (H - h) / 2;
+    const a = masked(c, s.img, g => g.roundRect(x0, y0, w, h, 18));
+    c.addChild(new Graphics().roundRect(x0, y0, w, h, 18).stroke({ width: 2, color: 0xffffff, alpha: .6 }));
+    return p => { a.scale.set(cover(a, w, h) * (1.06 + .12 * p)); a.position.set(x0 + w / 2 + r.dx * 20 * p, y0 + h / 2); };
   },
   split(c, s, r) {
-    const L = r.side, w = W * .56, x0 = L ? 0 : W - w;
+    const L = r.side;
+    if (tall()) { // retrato: metade de cima/baixo
+      const h = H * .56, y0 = L ? 0 : H - h;
+      rect(c, 0, L ? h : 0, W, H - h, 0, .35);
+      const a = masked(c, s.img, g => g.rect(0, y0, W, h)); rect(c, 0, L ? h - 3 : y0, W, 3, 0x00ff66, .9);
+      return p => { a.scale.set(cover(a, W, h) * (1.05 + .1 * p)); a.position.set(W / 2, y0 + h / 2 + (L ? -1 : 1) * 30 * p); };
+    }
+    const w = W * .56, x0 = L ? 0 : W - w;
     rect(c, L ? w : 0, 0, W - w, H, 0, .35);
     const a = masked(c, s.img, g => g.rect(x0, 0, w, H)); rect(c, L ? w - 3 : x0, 0, 3, H, 0x00ff66, .9);
     return p => { a.scale.set(cover(a, w, H) * (1.05 + .1 * p)); a.position.set(x0 + w / 2 + (L ? -1 : 1) * 30 * p, H / 2); };
   },
   diptych(c, s, r) {
-    const g = 6, w = (W - g) / 2, a = masked(c, s.img, m => m.rect(0, 0, w, H)), b = masked(c, s.alt || s.img, m => m.rect(w + g, 0, w, H));
+    const g = 6, T_ = tall(), w = T_ ? W : (W - g) / 2, h = T_ ? (H - g) / 2 : H, ox = T_ ? 0 : w + g, oy = T_ ? h + g : 0;
+    const a = masked(c, s.img, m => m.rect(0, 0, w, h)), b = masked(c, s.alt || s.img, m => m.rect(ox, oy, w, h));
     if (!s.alt || s.alt === s.img) b.scale.x = -1;
-    return p => { a.scale.set(cover(a, w, H) * (1.05 + .1 * p)); a.position.set(w / 2, H / 2 + 20 * (p - .5)); const k = cover(b, w, H) * (1.15 - .1 * p); b.scale.set(b.scale.x < 0 ? -k : k, k); b.position.set(w + g + w / 2, H / 2 - 20 * (p - .5)); };
+    return p => { a.scale.set(cover(a, w, h) * (1.05 + .1 * p)); a.position.set(w / 2 + (T_ ? 20 * (p - .5) : 0), h / 2 + (T_ ? 0 : 20 * (p - .5))); const k = cover(b, w, h) * (1.15 - .1 * p); b.scale.set(b.scale.x < 0 ? -k : k, k); b.position.set(ox + w / 2, oy + h / 2); };
   },
   triptych(c, s) {
-    const g = 6, w = (W - 2 * g) / 3, ss = [0, 1, 2].map(i => masked(c, s.img, m => m.rect(i * (w + g), 0, w, H)));
-    return p => ss.forEach((a, i) => { a.scale.set(cover(a) * (1.1 + .05 * i)); a.position.set(W / 2, H / 2 + (i % 2 ? 1 : -1) * 30 * (p - .5)); });
+    const g = 6, T_ = tall(), w = T_ ? W : (W - 2 * g) / 3, h = T_ ? (H - 2 * g) / 3 : H, ss = [0, 1, 2].map(i => masked(c, s.img, m => m.rect(T_ ? 0 : i * (w + g), T_ ? i * (h + g) : 0, w, h)));
+    return p => ss.forEach((a, i) => { const d = (i % 2 ? 1 : -1) * 30 * (p - .5); a.scale.set(cover(a) * (1.1 + .05 * i)); a.position.set(W / 2 + (T_ ? d : 0), H / 2 + (T_ ? 0 : d)); });
   },
   mosaic(c, s) {
     const g = 6, w = (W - g) / 2, h = (H - g) / 2, D = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
@@ -102,17 +116,18 @@ const LAYOUTS = {
   },
   diagonal(c, s, r) {
     blurBg(s.img, c);
-    const pts = r.side ? [W * .3, 0, W, 0, W, H, W * .55, H] : [0, 0, W * .7, 0, W * .45, H, 0, H];
+    const pts = tall() ? (r.side ? [0, H * .3, W, H * .45, W, H, 0, H] : [0, 0, W, 0, W, H * .55, 0, H * .7]) : r.side ? [W * .3, 0, W, 0, W, H, W * .55, H] : [0, 0, W * .7, 0, W * .45, H, 0, H];
     const a = masked(c, s.img, g => g.poly(pts));
-    c.addChild(new Graphics().moveTo(r.side ? W * .3 : W * .7, 0).lineTo(r.side ? W * .55 : W * .45, H).stroke({ width: 4, color: 0x00ff66, alpha: .8 }));
-    return p => { a.scale.set(cover(a) * (1.08 + .1 * p)); a.position.set(W / 2 + (r.side ? 1 : -1) * W * .18, H / 2); };
+    if (tall()) c.addChild(new Graphics().moveTo(0, r.side ? H * .3 : H * .7).lineTo(W, r.side ? H * .45 : H * .55).stroke({ width: 4, color: 0x00ff66, alpha: .8 }));
+    else c.addChild(new Graphics().moveTo(r.side ? W * .3 : W * .7, 0).lineTo(r.side ? W * .55 : W * .45, H).stroke({ width: 4, color: 0x00ff66, alpha: .8 }));
+    return p => { a.scale.set(cover(a) * (1.08 + .1 * p)); a.position.set(W / 2 + (tall() ? 0 : (r.side ? 1 : -1) * W * .18), H / 2 + (tall() ? (r.side ? 1 : -1) * H * .15 : 0)); };
   },
   circle(c, s, r) {
     blurBg(s.img, c);
-    const R = H * .36, cx = W / 2 + (r.side ? -1 : 1) * W * .18, a = masked(c, s.img, g => g.circle(cx, H / 2, R));
+    const R = Math.min(W, H) * .36, T_ = tall(), cx = T_ ? W / 2 : W / 2 + (r.side ? -1 : 1) * W * .18, cy = T_ ? H / 2 + (r.side ? -1 : 1) * H * .14 : H / 2, a = masked(c, s.img, g => g.circle(cx, cy, R));
     const ring = new Graphics().circle(0, 0, R + 10).stroke({ width: 3, color: 0x00ff66, alpha: .8 }).circle(0, 0, R + 22).stroke({ width: 1, color: 0x9d00ff, alpha: .7 });
-    ring.position.set(cx, H / 2); c.addChild(ring);
-    return p => { a.scale.set(cover(a, R * 2, R * 2) * (1.1 + .15 * p)); a.position.set(cx, H / 2); ring.scale.set(1 + .03 * Math.sin(p * 6)); };
+    ring.position.set(cx, cy); c.addChild(ring);
+    return p => { a.scale.set(cover(a, R * 2, R * 2) * (1.1 + .15 * p)); a.position.set(cx, cy); ring.scale.set(1 + .03 * Math.sin(p * 6)); };
   },
   strips(c, s, r) {
     const n = 8, h = H / n, a = spr(tex(s.img), c), m = new Graphics(); c.addChild(m); a.mask = m;

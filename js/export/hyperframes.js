@@ -1,7 +1,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import { toWav } from '../audio/wav.js';
 import { posFor } from '../render/titles.js';
-import { T } from '../render/layouts.js';
+import { T, W as LW, H as LH } from '../render/layouts.js';
 
 // Exporta o projeto como composição HyperFrames (HTML + GSAP + assets) em .zip
 const K = 1.5, X = v => +(v * K).toFixed(1), f = v => +v.toFixed(3);
@@ -77,7 +77,7 @@ export async function exportHyperFrames({ segs, caps, dir, mix, style = 0, title
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
 body{margin:0;background:#000}
-#root{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:'Archivo Black',sans-serif}
+#root{position:relative;width:${LW * 1.5}px;height:${LH * 1.5}px;overflow:hidden;font-family:'Archivo Black',sans-serif}
 #bg{position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,${c1},transparent 55%),radial-gradient(circle at 70% 60%,${c2},transparent 55%),radial-gradient(circle at 50% 100%,${c3},#000 70%);background-size:200% 200%}
 .mono{font-family:'JetBrains Mono',monospace}
 .cred{position:absolute;right:27px;top:24px;z-index:800;font:20px 'JetBrains Mono',monospace;color:rgba(255,255,255,.55)}
@@ -96,7 +96,7 @@ body{margin:0;background:#000}
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="${D}" data-width="1920" data-height="1080" data-fps="30">
+<div id="root" data-composition-id="main" data-start="0" data-duration="${D}" data-width="${LW * 1.5}" data-height="${LH * 1.5}" data-fps="30">
 <div id="bg"></div>
 <audio id="mix" class="clip" src="assets/audio.wav" data-start="0" data-duration="${D}" data-track-index="1" data-volume="1"></audio>
 ${H.join('\n')}

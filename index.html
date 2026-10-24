@@ -16,6 +16,12 @@
   <input id="video-title" data-persist class="inp !py-1.5 !w-56 text-xs" placeholder="Título do vídeo">
   <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400"><span id="status-indicator" class="w-2 h-2 rounded-full bg-zinc-600"></span><span id="status-text">CARREGANDO...</span></div>
   <div class="flex-1"></div>
+  <select id="aspect" data-persist class="hidden"><option>16:9</option><option>9:16</option><option>1:1</option></select>
+  <div id="aspect-btns" class="flex rounded-lg overflow-hidden border border-zinc-800 text-[11px]">
+    <button data-a="16:9" class="asp" title="Horizontal (YouTube) · 1920×1080"><i class="inline-block w-5 h-3 border-2 border-current rounded-sm"></i> 16:9</button>
+    <button data-a="9:16" class="asp" title="Vertical (Shorts, Reels, TikTok) · 1080×1920"><i class="inline-block w-2.5 h-4 border-2 border-current rounded-sm"></i> 9:16</button>
+    <button data-a="1:1" class="asp" title="Quadrado (feed) · 1080×1080"><i class="inline-block w-3.5 h-3.5 border-2 border-current rounded-sm"></i> 1:1</button>
+  </div>
   <button id="btn-vary" disabled class="btn !py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 opacity-40 cursor-not-allowed"><i data-lucide="shuffle" class="w-4 h-4"></i> Variar</button>
   <button id="btn-manifest" class="btn !py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 text-white"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Gerar prévia</button>
   <div class="relative">

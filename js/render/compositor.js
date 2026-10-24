@@ -22,6 +22,7 @@ export async function createCompositor(canvas, bgCanvas) {
   let segs = [], live = new Map();
 
   return {
+    destroy() { app.destroy({ removeView: true }, { children: true }); },
     load(s) { live.forEach(x => x.c.destroy({ children: true })); live = new Map(); segs = s; prepare(segs); },
     render(t, { caps = [], timeline = [], style = 0, dir = {}, tx = {} } = {}) {
       bgT.source.update();

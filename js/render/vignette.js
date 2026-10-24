@@ -57,7 +57,7 @@ export function drawVignette(g, t, v, o = {}) {
     case 'lines': {
       g.strokeStyle = c1 + '22'; g.lineWidth = 1;
       for (let x = 0; x < W; x += 40) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
-      const bw = 760, bh = 260, x0 = cx - bw / 2, y0 = cy - bh / 2, per = 2 * (bw + bh), L = per * io(p * 1.6);
+      const bw = Math.min(760, W * .9), bh = 260, x0 = cx - bw / 2, y0 = cy - bh / 2, per = 2 * (bw + bh), L = per * io(p * 1.6);
       g.strokeStyle = c1; g.lineWidth = 3; g.shadowColor = c1; g.shadowBlur = 16; g.beginPath(); g.moveTo(x0, y0);
       [[bw, 0], [0, bh], [-bw, 0], [0, -bh]].reduce((acc, [dx, dy], i, arr) => { const seg = Math.abs(dx + dy), u = cl((L - acc.l) / seg), pt = { x: acc.x + dx * u, y: acc.y + dy * u }; if (u > 0) g.lineTo(pt.x, pt.y); return { l: acc.l + seg, x: acc.x + dx, y: acc.y + dy }; }, { l: 0, x: x0, y: y0 });
       g.stroke(); g.shadowBlur = 0;
