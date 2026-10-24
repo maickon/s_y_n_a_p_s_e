@@ -1,6 +1,7 @@
 import { Application, Container, Sprite, Texture, CanvasSource } from 'pixi.js';
 import { RGBSplitFilter, GlitchFilter, CRTFilter } from 'pixi-filters';
 import { build, prepare, W, H, T, cl, ease } from './layouts.js';
+import { STYLES } from '../core/styles.js';
 import { drawCaptions } from './captions.js';
 import { drawIntro, drawOutro, drawKinetic } from './titles.js';
 
@@ -36,7 +37,7 @@ export async function createCompositor(canvas, bgCanvas) {
       const sc = timeline.findLast(s => t >= s.start - .05), k = sc ? 1 - cl((t - sc.start + .05) / .35) : 0;
       gl.enabled = rgb.enabled = k > 0;
       if (k > 0) { gl.offset = 40 * k; gl.seed = (t * 7.7) % 1; gl.refresh(); rgb.red = { x: -10 * k, y: 0 }; rgb.blue = { x: 10 * k, y: 0 }; }
-      crt.time = t * 10; crt.seed = (t * 3.1) % 1; crt.lineContrast = style === 3 ? .3 : .15;
+      const ck = STYLES[style]?.crt ?? 1; crt.enabled = ck > 0; crt.time = t * 10; crt.seed = (t * 3.1) % 1; crt.lineContrast = .15 * ck; crt.noise = .08 * Math.min(ck, 1); crt.vignetting = .32 * Math.min(ck, 1);
       // legendas + créditos
       g.clearRect(0, 0, W, H);
       const cs = segs.find(s => t >= s.a && t < s.b)?.credit;

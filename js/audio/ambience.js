@@ -1,8 +1,7 @@
 import { rng } from '../core/script.js';
 import { noise, tone, burst } from './synth.js';
 
-export const AMBS = { auto: 'Automático (pelo estilo)', rain: 'Chuva', wind: 'Vento', hum: 'Zumbido Elétrico', space: 'Vácuo Espacial', static: 'Estática', none: 'Nenhum' };
-export const AUTO = ['rain', 'space', 'static', 'hum'];
+export const AMBS = { auto: 'Automático (pelo estilo)', rain: 'Chuva', wind: 'Vento', hum: 'Zumbido Elétrico', space: 'Vácuo Espacial', static: 'Estática', ocean: 'Oceano', projector: 'Projetor de Filme', none: 'Nenhum' };
 
 const bed = (ctx, out, dur, nodes, vol) => {
   const s = new AudioBufferSourceNode(ctx, { buffer: noise(ctx), loop: true }), g = new GainNode(ctx, { gain: vol });
@@ -26,6 +25,12 @@ export function ambience(ctx, out, dur, kind, seed) {
     const f = bq('lowpass', 250); lfo(ctx, f.frequency, .05, 150, dur);
     bed(ctx, out, dur, [f], .6);
     tone(ctx, out, { f: 36, t: 0, len: dur, vol: .1, a: 3, s: 1, d: 1, r: 2 });
+  } else if (kind === 'ocean') {
+    const f = bq('lowpass', 700), g = bed(ctx, out, dur, [f], .5); g.gain.value = .3; lfo(ctx, g.gain, .09, .25, dur); lfo(ctx, f.frequency, .09, 350, dur);
+  } else if (kind === 'projector') {
+    for (let t = 0; t < dur; t += 1 / 24) burst(ctx, out, { t, len: .006, vol: .05 + r() * .03, type: 'bandpass', f: 2500, Q: 3 });
+    tone(ctx, out, { type: 'sawtooth', f: 60, t: 0, len: dur, vol: .02, a: 1, s: 1, d: 1, r: 1, lp: 300 });
+    bed(ctx, out, dur, [bq('bandpass', 1200, .8)], .025);
   } else if (kind === 'static') {
     bed(ctx, out, dur, [bq('highpass', 3000)], .09);
     for (let t = 0; t < dur; t += r() * .5) burst(ctx, out, { t, len: .008, vol: .35 * r(), type: 'highpass', f: 1000 });

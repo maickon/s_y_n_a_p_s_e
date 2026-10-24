@@ -6,7 +6,7 @@ import { norm } from './words.js';
 export const INTRO = 2.8, OUTRO = 4.5;
 
 // monta a edição: segmentos (cortes), títulos cinéticos, intro e outro
-export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [] }) {
+export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto' }) {
   const end = tl.at(-1).end, dur = end + OUTRO, segs = [];
   tl.forEach((s, i) => {
     const o = ov[i] || {}, imgs = o.img ? [o.img] : P[i];
@@ -19,11 +19,11 @@ export function direct(tl, P, { variation = 0, ov = [], title = '', credits = []
     }
     cuts.push(b);
     for (let k = 0; k < n; k++) {
-      const im = imgs[k % imgs.length];
-      segs.push({ img: im.img, credit: im.credit, a: cuts[k], b: cuts[k + 1], seed: hash(s.text) + k * 7919 + variation * 104729, scene: i, layout: o.layout, trans: o.trans });
+      const im = imgs[k % imgs.length], alt = imgs[(k + 1) % imgs.length] !== im ? imgs[(k + 1) % imgs.length] : P[(i + 1) % P.length]?.[0] || im;
+      segs.push({ img: im.img, alt: alt.img, credit: im.credit, a: cuts[k], b: cuts[k + 1], seed: hash(s.text) + k * 7919 + variation * 104729, scene: i, layout: o.layout, trans: o.trans, grade: o.grade });
     }
   });
-  prepare(segs);
+  prepare(segs, { grades, grade });
   const R = rng(hash(tl[0].text) + variation * 31 + 7);
   const kin = tl.flatMap((s, i) => {
     const w = keywords(s.text, 1)[0];

@@ -6,7 +6,7 @@ Gerador de vídeo procedural 100% client-side (GitHub Pages). Texto → voz sint
 - [x] Etapa 1: estrutura modular + TTS (Piper pt-BR, eSpeak, Kokoro EN) com 13 efeitos de voz (WSOLA pitch/tempo) + export WAV
 - [x] Etapa 2: legendas karaokê no canvas (estimativa silábica + Whisper opcional) + SRT
 - [x] Etapa 3: imagens (URL `palavra | url`, upload, busca Wikimedia+Openverse, proxy CORS wsrv.nl, CLIP opcional)
-- [x] Etapa 4: compositor PixiJS (5 layouts, 6 transições, glitch/RGB split nas trocas, CRT)
+- [x] Etapa 4: compositor PixiJS (26 layouts, 21 transições, 19 tratamentos de cor, 13 dimensões estéticas)
 - [x] Etapa 5: mixdown offline (música procedural por estilo, 5 ambientes, SFX nas transições, ducking, upload/Openverse)
 - [x] Etapa 6: direção automática (intro/outro com créditos, títulos cinéticos, cortes por fala, Variar, editor por cena)
 - [x] Etapa 7: export MP4 quadro a quadro (Mediabunny/WebCodecs, 720p/1080p, 30/60fps) + WebM preview

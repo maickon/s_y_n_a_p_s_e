@@ -14,7 +14,9 @@ import { createCompositor } from './render/compositor.js';
 import { exportMP4 } from './export/mp4.js';
 import { exportHyperFrames } from './export/hyperframes.js';
 import { direct, INTRO } from './core/direct.js';
-import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
+import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES } from './render/layouts.js';
+import { STYLES } from './core/styles.js';
+import { PACKS } from './audio/sfx.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
 import { warn, progress } from './ui/modal.js';
@@ -82,11 +84,11 @@ async function run(fn) {
 
 // edição -> mix -> reprodução/gravação
 async function render() {
-  dir = direct(track.timeline, P, { variation, ov, title: $('video-title').value.trim(), credits: ['Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')] });
+  dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(), credits: ['Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')] });
   comp.load(segsCur = dir.segs);
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
-    musicBuf: music?.buf, amb: $('amb-select').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
+    musicBuf: music?.buf, amb: $('amb-select').value, pack: $('sfx-pack').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
@@ -131,7 +133,8 @@ const on = (ids, ev, lv) => ids.split(' ').forEach(id => $(id).addEventListener(
 on('voice-select effect-select voice-pitch voice-rate', 'change', 4);
 on('img-search img-clip', 'change', 3);
 on('video-title', 'input', 2);
-on('style-select amb-select vol-music vol-amb vol-sfx', 'change', 1);
+on('style-select grade-select', 'change', 2);
+on('amb-select sfx-pack vol-music vol-amb vol-sfx', 'change', 1);
 
 // quadro determinístico no tempo t (preview e export)
 function drawAt(t) {
@@ -247,6 +250,9 @@ const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) pl.seek
 window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
+el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
+$('grade-select').innerHTML = '<option value="auto">Tratamento: automático (pelo estilo)</option>' + GRADE_NAMES.map(k => `<option value="${k}">Tratamento: ${GRADES[k][0]}</option>`).join('');
+$('sfx-pack').innerHTML = '<option value="auto">Automático</option>' + Object.entries(PACKS).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 const setMusic = m => {
   music = m; live(1);
@@ -285,7 +291,9 @@ $('music-search').onclick = async () => {
 $('music-q').onkeydown = e => { if (e.key === 'Enter') $('music-search').click(); };
 
 // --- Editor de cenas ---
-const LN = { full: 'Tela cheia', frame: 'Moldura', split: 'Dividida', double: 'Dupla exp.', circle: 'Círculo' }, TNm = { fade: 'Fade', glitch: 'Glitch', zoom: 'Zoom', pixel: 'Pixel', wipe: 'Wipe', slide: 'Slide' };
+const LN = { full: 'Tela cheia', push: 'Push-in', pan: 'Pan horizontal', tilt: 'Pan vertical', rotate: 'Rotação lenta', focus: 'Rack focus', zoomout: 'Zoom revelação', letterbox: 'Letterbox', vignette: 'Vinheta', spotlight: 'Holofote', frame: 'Moldura', polaroid: 'Polaroid', archive: 'Foto de arquivo', parallax: 'Parallax', window: 'Janela', split: 'Dividida', diptych: 'Díptico', triptych: 'Tríptico', mosaic: 'Mosaico', stack: 'Pilha de fotos', filmstrip: 'Película', tv: 'TV antiga', diagonal: 'Diagonal', circle: 'Círculo', strips: 'Faixas', double: 'Dupla exposição' },
+  TNm = { fade: 'Fade', dissolve: 'Dissolver', dipblack: 'Fade p/ preto', dipwhite: 'Fade p/ branco', flash: 'Flash', lightleak: 'Light leak', burn: 'Film burn', blur: 'Desfoque', zoom: 'Zoom', whip: 'Whip pan', push: 'Push', slide: 'Slide', wipe: 'Wipe', iris: 'Íris', barn: 'Portas', blinds: 'Persianas', glitch: 'Glitch', rgb: 'RGB split', pixel: 'Pixel', warp: 'Distorção', shake: 'Impacto' },
+  GN = Object.fromEntries(GRADE_NAMES.map(k => [k, GRADES[k][0]]));
 const opts = (list, names, cur, auto) => `<option value="">Auto${auto ? ' (' + names[auto] + ')' : ''}</option>` + list.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${names[k]}</option>`).join('');
 function editor() {
   const sel = 'bg-zinc-900 border border-zinc-800 rounded p-1 w-full';
@@ -293,9 +301,10 @@ function editor() {
     const o = ov[i] || {}, sg = segsCur.find(x => x.scene === i), d = document.createElement('div');
     d.className = 'grid grid-cols-12 gap-1 items-center bg-black/30 rounded p-1';
     const imgs = Object.fromEntries(assets.map((a, k) => [k, `${k + 1}. ${(a.tag || a.origin).slice(0, 14)}`]));
-    d.innerHTML = `<button class="col-span-1 text-purple-400 text-center hover:text-emerald-300" title="Ir para a cena">▶${i + 1}</button><span class="col-span-5 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
+    d.innerHTML = `<button class="col-span-1 text-purple-400 text-center hover:text-emerald-300" title="Ir para a cena">▶${i + 1}</button><span class="col-span-3 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
       <select data-k="layout" class="col-span-2 ${sel}">${opts(LAYOUT_NAMES, LN, o.layout, !o.layout && sg?.layout)}</select>
       <select data-k="trans" class="col-span-2 ${sel}">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select>
+      <select data-k="grade" class="col-span-2 ${sel}">${opts(GRADE_NAMES, GN, o.grade, !o.grade && sg?.grade)}</select>
       <select data-k="img" class="col-span-2 ${sel}">${opts(Object.keys(imgs), imgs, o.img ? String(assets.indexOf(o.img)) : '', '')}</select>`;
     d.querySelector('button').onclick = () => pl.seek(Math.max(0, s.start - .3));
     d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value };  live(2); });
