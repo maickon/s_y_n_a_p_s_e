@@ -17,6 +17,7 @@ import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES } from './render/layouts.js';
 import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
+import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
 import { createPlayer } from './ui/player.js';
 import { warn, progress } from './ui/modal.js';
@@ -84,7 +85,10 @@ async function run(fn) {
 
 // edição -> mix -> reprodução/gravação
 async function render() {
-  dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(), credits: ['Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')] });
+  dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(),
+    credits: ['Voz: ' + el.voice.selectedOptions[0].text + ' · ' + el.voice.value.split(':')[0], 'Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')],
+    outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
+  readText();
   comp.load(segsCur = dir.segs);
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
@@ -132,7 +136,8 @@ async function flush() {
 const on = (ids, ev, lv) => ids.split(' ').forEach(id => $(id).addEventListener(ev, () => live(lv)));
 on('voice-select effect-select voice-pitch voice-rate', 'change', 4);
 on('img-search img-clip', 'change', 3);
-on('video-title', 'input', 2);
+on('video-title outro-title outro-lines', 'input', 2);
+on('outro-on outro-auto', 'change', 2);
 on('style-select grade-select', 'change', 2);
 on('amb-select sfx-pack vol-music vol-amb vol-sfx', 'change', 1);
 
@@ -140,7 +145,7 @@ on('amb-select sfx-pack vol-music vol-amb vol-sfx', 'change', 1);
 function drawAt(t) {
   const tl = track?.timeline || [], i = tl.findLastIndex(s => t >= s.start - .05), s = tl[i], style = el.style.selectedIndex;
   bg.u.style.value = style; bg.u.seed.value = s ? hash(s.text) % 100 : 0; bg.u.glitch.value = s ? Math.max(0, 1 - (t - s.start) / .3) : 0; bg.u.t.value = t * 1.8;
-  frame(t, { caps, timeline: tl, style, dir });
+  frame(t, { caps, timeline: tl, style, dir, tx: TX });
   return i;
 }
 
@@ -312,10 +317,30 @@ function editor() {
   }));
 }
 
+// --- Texto, cores e marca d'água (só visual: redesenha sem refazer áudio) ---
+const TX = { wm: { type: 'none' } };
+$('cap-style').innerHTML = '<option value="auto">Automático (pelo estilo)</option>' + Object.entries(CAP_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+$('cap-font').innerHTML = $('title-font').innerHTML = '<option value="auto">Automática</option>' + FONTS.map(f => `<option style="font-family:'${f}'">${f}</option>`).join('');
+function readText() {
+  const v = id => $(id).value, auto = $('col-auto').checked, pal = PALETTES[(hash(el.txt.value) + variation) % PALETTES.length], st = STYLES[el.style.selectedIndex];
+  Object.assign(TX, { cap: v('cap-style') === 'auto' ? st.cap || 'karaoke' : v('cap-style'), font: v('cap-font'), titleFont: v('title-font'), pos: v('cap-pos'), size: v('cap-size') / 100, opacity: v('cap-op') / 100,
+    color: auto ? pal[0] : v('col-text'), accent: auto ? pal[1] : v('col-accent'), capOff: $('cap-off').checked });
+  Object.assign(TX.wm, { type: v('wm-type'), text: v('wm-text'), pos: v('wm-pos'), size: +v('wm-size'), opacity: v('wm-op') / 100, font: TX.titleFont === 'auto' ? 'Syne' : TX.titleFont });
+  for (const [id, s] of [['cap-size', '%'], ['cap-op', '%'], ['wm-size', '%'], ['wm-op', '%']]) $(id + '-v').textContent = v(id) + s;
+  [TX.font, TX.titleFont, 'Syne'].forEach(f => f !== 'auto' && document.fonts.load(`800 40px "${f}"`).then(() => !pl.playing && drawAt(pl.time)));
+  if (!pl.playing) drawAt(pl.time);
+}
+$('text-panel').addEventListener('input', e => e.target.id !== 'wm-file' && !/outro/.test(e.target.id) && readText());
+$('text-panel').addEventListener('change', e => e.target.id !== 'wm-file' && !/outro/.test(e.target.id) && readText());
+const setWm = async f => { if (!f) return; const im = new Image(); im.src = URL.createObjectURL(f); await im.decode(); TX.wm.img = im; };
+$('wm-file').onchange = async e => { const f = e.target.files[0]; if (!f) return; await setWm(f); store.set('wm', f); $('wm-type').value = 'image'; readText(); };
+
 // --- Persistência (IndexedDB) ---
 const addFile = f => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file' }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => store.set('imgs', assets.filter(a => a.blob).map(a => a.blob));
 await store.bindForm(() => { count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+await setWm(await store.get('wm')).catch(() => { });
+readText();
 for (const f of await store.get('imgs') || []) await addFile(f);
 grid();
 const ms = await store.get('music');

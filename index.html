@@ -5,7 +5,7 @@
 <title>S.Y.N.A.P.S.E - Gerador Surrealista de Vídeo</title>
 <link rel="stylesheet" href="css/tw.css">
 <script src="vendor/lucide.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Syne:wght@700;800&family=Inter:wght@600;800&family=Montserrat:wght@600;800&family=Bebas+Neue&family=Anton&family=Oswald:wght@600&family=Archivo+Black&family=Space+Grotesk:wght@600;700&family=Playfair+Display:wght@600;800&family=IBM+Plex+Serif:wght@600&family=Cinzel:wght@600;800&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js","pixi.js":"./vendor/pixi.min.mjs","pixi-filters":"./vendor/pixi-filters.mjs","mediabunny":"./vendor/mediabunny.min.mjs","fflate":"./vendor/fflate.mjs","onnxruntime-web":"https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/esm/ort.min.js"}}</script>
 </head>
@@ -116,6 +116,39 @@
       </div>
       <div class="grid grid-cols-12 gap-1 text-[10px] uppercase text-zinc-500 px-1"><span class="col-span-1 text-center">#</span><span class="col-span-3">Cena</span><span class="col-span-2">Layout</span><span class="col-span-2">Transição</span><span class="col-span-2">Tratamento</span><span class="col-span-2">Imagem</span></div>
       <div id="scene-list" class="flex flex-col gap-1 max-h-72 overflow-y-auto text-[11px]"><span class="text-zinc-600 p-2">Manifeste um roteiro para editar as cenas.</span></div>
+    </div>
+    <div id="text-panel" class="bg-zinc-950/80 p-4 rounded-xl border border-zinc-800 flex flex-col gap-2 text-[11px] text-zinc-400">
+      <details open class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="type" class="w-4 h-4"></i> Texto & Legendas</summary>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+          <label class="flex flex-col gap-1">Modelo<select id="cap-style" data-persist class="inp !p-1.5 text-[11px]"></select></label>
+          <label class="flex flex-col gap-1">Fonte legenda<select id="cap-font" data-persist class="inp !p-1.5 text-[11px]"></select></label>
+          <label class="flex flex-col gap-1">Fonte títulos<select id="title-font" data-persist class="inp !p-1.5 text-[11px]"></select></label>
+          <label class="flex flex-col gap-1">Posição<select id="cap-pos" data-persist class="inp !p-1.5 text-[11px]"><option value="bottom">Inferior</option><option value="top">Superior</option><option value="middle">Centro</option><option value="lowerleft">Lower third (esq.)</option></select></label>
+          <label>Tamanho <span id="cap-size-v" class="float-right text-purple-400">100%</span><input type="range" id="cap-size" data-persist min="50" max="170" value="100" class="w-full accent-purple-500"></label>
+          <label>Opacidade <span id="cap-op-v" class="float-right text-purple-400">100%</span><input type="range" id="cap-op" data-persist min="20" max="100" value="100" class="w-full accent-purple-500"></label>
+          <label class="flex items-center gap-2"><input type="checkbox" id="col-auto" data-persist checked class="accent-emerald-500"> Cores sorteadas</label>
+          <div class="flex items-center gap-2"><input type="color" id="col-text" data-persist value="#ffffff" class="w-8 h-7 bg-transparent" title="Cor do texto"><input type="color" id="col-accent" data-persist value="#00ff66" class="w-8 h-7 bg-transparent" title="Cor de destaque"><span>texto / destaque</span></div>
+          <label class="flex items-center gap-2"><input type="checkbox" id="cap-off" data-persist class="accent-emerald-500"> Ocultar legendas e títulos</label>
+        </div>
+      </details>
+      <details class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="stamp" class="w-4 h-4"></i> Marca d'água</summary>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+          <label class="flex flex-col gap-1">Tipo<select id="wm-type" data-persist class="inp !p-1.5 text-[11px]"><option value="none">Nenhuma</option><option value="text">Texto</option><option value="image">Imagem</option></select></label>
+          <label class="flex flex-col gap-1">Texto<input id="wm-text" data-persist type="text" class="inp !p-1.5 text-[11px]" placeholder="@seucanal"></label>
+          <label class="flex flex-col gap-1">Imagem (PNG)<input id="wm-file" type="file" accept="image/*" class="text-[10px]"></label>
+          <label class="flex flex-col gap-1">Posição<select id="wm-pos" data-persist class="inp !p-1.5 text-[11px]"><option value="tl">Sup. esquerda</option><option value="tr" selected>Sup. direita</option><option value="bl">Inf. esquerda</option><option value="br">Inf. direita</option><option value="cc">Centro</option></select></label>
+          <label>Tamanho <span id="wm-size-v" class="float-right text-purple-400">12%</span><input type="range" id="wm-size" data-persist min="4" max="40" value="12" class="w-full accent-purple-500"></label>
+          <label>Opacidade <span id="wm-op-v" class="float-right text-purple-400">60%</span><input type="range" id="wm-op" data-persist min="10" max="100" value="60" class="w-full accent-purple-500"></label>
+        </div>
+      </details>
+      <details class="group"><summary class="cursor-pointer text-sm font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-2"><i data-lucide="list-end" class="w-4 h-4"></i> Encerramento</summary>
+        <div class="flex flex-col gap-2 mt-3">
+          <div class="flex flex-wrap gap-3 items-center"><label class="flex items-center gap-2"><input type="checkbox" id="outro-on" data-persist checked class="accent-emerald-500"> Mostrar encerramento</label>
+          <label class="flex items-center gap-2"><input type="checkbox" id="outro-auto" data-persist checked class="accent-emerald-500"> Incluir créditos automáticos (voz, música, imagens)</label></div>
+          <input id="outro-title" data-persist type="text" class="inp !p-2 text-xs" value="FIM DA TRANSMISSÃO" placeholder="Título do encerramento">
+          <textarea id="outro-lines" data-persist class="inp h-20 text-[11px] resize-y" placeholder="Créditos (uma linha por item)&#10;Roteiro: Fulano&#10;Edição: S.Y.N.A.P.S.E"></textarea>
+        </div>
+      </details>
     </div>
   </section>
 </main>

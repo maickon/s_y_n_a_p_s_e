@@ -3,11 +3,11 @@ import { keywords } from './keywords.js';
 import { hash, rng } from './script.js';
 import { norm } from './words.js';
 
-export const INTRO = 2.8, OUTRO = 4.5;
+export const INTRO = 2.8;
 
 // monta a edição: segmentos (cortes), títulos cinéticos, intro e outro
-export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto' }) {
-  const end = tl.at(-1).end, dur = end + OUTRO, segs = [];
+export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto', outro = { on: true, title: 'FIM DA TRANSMISSÃO', lines: [], auto: true } }) {
+  const end = tl.at(-1).end, dur = end + (outro.on ? 4.5 : 1.2), segs = [];
   tl.forEach((s, i) => {
     const o = ov[i] || {}, imgs = o.img ? [o.img] : P[i];
     if (!imgs.length) return;
@@ -34,6 +34,6 @@ export function direct(tl, P, { variation = 0, ov = [], title = '', credits = []
   return {
     segs, kin, duration: dur,
     intro: { title: (title || keywords(tl[0].text, 2).join(' ')).toUpperCase(), b: INTRO + .2, code: hash(tl.map(s => s.text).join()) },
-    outro: { a: end + .5, b: dur, credits: [...new Set(['Voz: eSpeak (meSpeak.js) · GPL', ...credits, ...segs.map(s => s.credit).filter(Boolean)])] }
+    outro: { a: end + .5, b: dur, off: !outro.on, title: outro.title || 'FIM DA TRANSMISSÃO', credits: [...new Set([...outro.lines, ...(outro.auto ? [...credits, ...segs.map(s => s.credit).filter(Boolean)] : [])])] }
   };
 }
