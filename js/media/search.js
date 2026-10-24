@@ -27,7 +27,7 @@ const SRC = {
     .then(d => d.results.map(r => ({ src: r.url, thumb: r.thumbnail || r.url, w: r.width, h: r.height, text: [r.title, ...(r.tags || []).map(t => t.name)].join(' '), credit: `${r.creator || '?'} · ${r.license.toUpperCase()} ${r.license_version || ''} (Openverse)` }))),
   wikimedia: q => get(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=10&prop=imageinfo&iiprop=url|mime|extmetadata&iiurlwidth=1600&gsrsearch=${enc(q + ' filetype:bitmap')}`)
     .then(d => Object.values(d.query?.pages || {}).map(p => [p.title, p.imageinfo?.[0]]).filter(([, i]) => i && /jpeg|png|webp/.test(i.mime))
-      .map(([t, i]) => ({ src: i.thumburl || i.url, thumb: i.thumburl || i.url, w: i.thumbwidth, h: i.thumbheight, text: t.replace(/^File:|\.\w+$/g, ''), credit: `${strip(i.extmetadata?.Artist?.value) || 'Wikimedia'} · ${i.extmetadata?.LicenseShortName?.value || ''} (Wikimedia)` })))
+      .map(([t, i]) => ({ src: i.thumburl || i.url, thumb: i.thumburl || i.url, w: i.thumbwidth, h: i.thumbheight, text: (t || '').replace(/^File:|\.\w+$/g, ''), credit: `${strip(i.extmetadata?.Artist?.value) || 'Wikimedia'} · ${i.extmetadata?.LicenseShortName?.value || ''} (Wikimedia)` })))
 };
 
 // tradução pt→en grátis (MyMemory) para as fontes indexadas em inglês

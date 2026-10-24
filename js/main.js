@@ -97,6 +97,7 @@ async function render() {
     intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
   readText();
   comp.load(segsCur = dir.segs);
+  if (!pl.playing) drawAt(pl.time); // o visual atualiza na hora; o áudio entra quando a mixagem terminar
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   const mo = { voice: track.buffer, voiceKey: track.key, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(curId) + variation,
     musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
@@ -174,19 +175,32 @@ function drawAt(t) {
   return i;
 }
 
-$('btn-mp4').onclick = () => mix && run(async () => {
-  const [h, fps] = $('mp4-q').value.split('p').map(Number), k = h / 1080, out = h === 1080 ? cv : Object.assign(document.createElement('canvas'), { width: Math.round(cv.width * k / 2) * 2, height: Math.round(cv.height * k / 2) * 2 }), og = out !== cv ? out.getContext('2d') : null;
-  const was = pl.time, m = progress({ title: `Exportando MP4 ${h}p${fps}`, source: cv });
-  pl.pause();
+// exportação em segundo plano: compositor próprio + retrato do projeto; o editor continua livre
+let exporting = false;
+$('btn-mp4').onclick = async () => {
+  if (!mix) return;
+  if (exporting) return warn('Já existe uma exportação em andamento.');
+  $('export-menu').classList.add('hidden');
+  const [h, fps] = $('mp4-q').value.split('p').map(Number), k = h / 1080, aspect = $('aspect').value;
+  const S = { tl: track.timeline, caps, dir, segs: segsCur, style: el.style.selectedIndex, tx: { ...TX, wm: { ...TX.wm } }, mix };
+  exporting = true;
+  const xc = document.createElement('canvas'), xbg = createBg(VW, VH), xcomp = await createCompositor(xc, xbg.canvas);
+  xcomp.load(S.segs);
+  const out = h === 1080 ? xc : Object.assign(document.createElement('canvas'), { width: Math.round(xc.width * k / 2) * 2, height: Math.round(xc.height * k / 2) * 2 }), og = out !== xc ? out.getContext('2d') : null;
+  const m = progress({ title: `Exportando MP4 ${aspect} ${h}p${fps} · pode continuar editando`, source: xc, floating: true });
+  const draw = t => {
+    const i = S.tl.findLastIndex(s => t >= s.start - .05), s = S.tl[i];
+    xbg.u.style.value = S.style; xbg.u.seed.value = s ? hash(s.text) % 100 : 0; xbg.u.glitch.value = s ? Math.max(0, 1 - (t - s.start) / .3) : 0; xbg.u.t.value = t * 1.8;
+    xbg.draw(); xcomp.render(t, { caps: S.caps, timeline: S.tl, style: S.style, dir: S.dir, tx: S.tx });
+    og?.drawImage(xc, 0, 0, out.width, out.height);
+  };
   try {
-    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: mix, duration: mix.duration, fps, cancelled: () => m.cancelled,
-      draw: t => { drawAt(t); og?.drawImage(cv, 0, 0, out.width, out.height); },
-      onProgress: (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`) });
-    download(blob, `SYNAPSE_${$('aspect').value.replace(':', 'x')}_${h}p${fps}_${Date.now()}.mp4`);
+    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: S.mix, duration: S.mix.duration, fps, cancelled: () => m.cancelled, draw, onProgress: (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`) });
+    download(blob, `SYNAPSE_${aspect.replace(':', 'x')}_${h}p${fps}_${Date.now()}.mp4`);
     status(`MP4 PRONTO · ${vc.toUpperCase()}/${(ac || 'sem áudio').toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
-  } catch (e) { if (e.message !== 'CANCELADO') throw e; status('EXPORTAÇÃO CANCELADA', 'bg-zinc-600'); }
-  finally { m.close(); pl.seek(was); }
-});
+  } catch (e) { if (e.message !== 'CANCELADO') { console.error(e); warn('Falha na exportação: ' + e.message); } else status('EXPORTAÇÃO CANCELADA', 'bg-zinc-600'); }
+  finally { m.close(); xcomp.destroy(); xbg.dispose(); exporting = false; }
+};
 
 // grava a reprodução em tempo real (WebM)
 $('btn-export').onclick = () => {
@@ -278,7 +292,7 @@ document.addEventListener('keydown', e => {
 });
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
-window.synapse = { assets, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
+window.synapse = { assets, get range() { return pl.range; }, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
@@ -336,6 +350,7 @@ function editor() {
 function selectScene(i, seek) {
   if (!track) return;
   follow = false;
+  if (pl.range && i !== sel) pl.setRange(null);
   sel = Math.max(0, Math.min(i, track.timeline.length - 1)); tl.select(sel); inspector();
   if (seek) pl.seek(Math.max(0, track.timeline[sel].start - .3));
 }
@@ -352,12 +367,14 @@ function inspector() {
       ${assets.map((a, k) => `<div data-img="${k}" class="tile ${o.img === a ? 'on' : !o.img && a === cur ? 'on' : ''}" title="${escH(a.tag || a.origin)}" style="background-image:url('${a.img.src}')"></div>`).join('')}</div></div>
     <div class="fl">Buscar imagem para esta cena<div class="flex gap-1.5"><input data-q class="inp !p-1.5 text-[11px]" value="${escH(o.q || CANDS[i]?.q || autoQuery(s.text))}"><button data-search class="pbtn bg-zinc-800" title="Buscar"><i data-lucide="search" class="w-4 h-4"></i></button></div>
       <div data-cands class="grid grid-cols-3 gap-1.5"></div></div>
-    <button data-go class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="play" class="w-4 h-4"></i> Ir para a cena</button>`;
+    <div class="grid grid-cols-2 gap-2"><button data-go class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="play" class="w-4 h-4"></i> Ir para</button>
+      <button data-loop class="btn ${pl.range ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200'}" title="Toca só esta cena, repetindo"><i data-lucide="repeat" class="w-4 h-4"></i> ${pl.range ? 'Parar loop' : 'Loop da cena'}</button></div>`;
   const set = (k, v) => { ov[i] = { ...ov[i], [k]: v }; live(2); };
   b.querySelectorAll('select').forEach(x => x.onchange = () => set(x.dataset.k, x.value || undefined));
   b.querySelectorAll('[data-img]').forEach(x => x.onclick = () => { set('img', x.dataset.img === '' ? undefined : assets[x.dataset.img]); b.querySelectorAll('[data-img]').forEach(y => y.classList.toggle('on', y === x)); });
   b.querySelectorAll('[data-nav]').forEach(x => x.onclick = () => selectScene(i + +x.dataset.nav, true));
   b.querySelector('[data-go]').onclick = () => selectScene(i, true);
+  b.querySelector('[data-loop]').onclick = () => { if (pl.range) pl.setRange(null); else { const a0 = Math.max(0, s.start - .4); pl.setRange([a0, (track.timeline[i + 1]?.start ?? mix.duration) - .2]); stopAud(); pl.play(a0); } inspector(); };
   // candidatas da busca: clique usa a imagem na cena
   const cands = b.querySelector('[data-cands]'), showC = l => {
     cands.innerHTML = l.length ? l.slice(0, 12).map((c, k) => `<div data-c="${k}" class="tile ${cur?.src === c.src ? 'on' : ''}" title="${escH(c.credit)}" style="background-image:url('${c.thumb}')"></div>`).join('') : '<span class="col-span-3 text-zinc-600">Nenhum resultado. Tente outro termo ou ative mais fontes na aba Mídia.</span>';
@@ -377,7 +394,7 @@ function inspector() {
   b.querySelector('[data-q]').onkeydown = e => e.key === 'Enter' && doSearch();
   lucide.createIcons({ root: b }); enhanceSelects(b);
 }
-const tl = createTimeline($('tl-inner'), $('tl-scroll'), { onSeek: t => pl.seek(t), onSelect: i => selectScene(i) });
+const tl = createTimeline($('tl-inner'), $('tl-scroll'), { onSeek: t => { if (pl.range && (t < pl.range[0] || t > pl.range[1])) { pl.setRange(null); inspector(); } pl.seek(t); }, onSelect: i => selectScene(i) });
 $('tl-zoom').oninput = e => tl.setZoom(+e.target.value);
 
 // --- Texto, cores e marca d'água (só visual: redesenha sem refazer áudio) ---
@@ -510,6 +527,7 @@ async function applyAspect() {
   drawAt(pl.time);
 }
 document.querySelectorAll('.asp').forEach(b => b.onclick = async () => {
+  if (exporting) return warn('Aguarde a exportação terminar para trocar o formato.');
   if (busy || $('aspect').value === b.dataset.a) return;
   $('aspect').value = b.dataset.a; $('aspect').dispatchEvent(new Event('change'));
   await applyAspect(); live(2);

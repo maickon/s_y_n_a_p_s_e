@@ -11,12 +11,13 @@ async function trim(k) {
   while (idx.length > 600) store.del('tts:' + idx.shift());
   store.set('ttsIdx', idx);
 }
-async function sceneAudio(text, voice, effect, tom, speed, onDownload) {
-  const k = hashKey([text, voice, effect, tom, speed].join('|'));
+const keyOf = (text, voice, effect, tom, speed) => hashKey([text, voice, effect, tom, speed].join('|'));
+async function sceneAudio(text, voice, effect, tom, speed, onDownload, pre) {
+  const k = keyOf(text, voice, effect, tom, speed);
   if (MEM.has(k)) return { ...MEM.get(k), k };
   const s = await store.get('tts:' + k);
   if (s?.blob) { const v = { out: await unpack(s), n: s.n }; MEM.set(k, v); return { ...v, k, cached: true }; }
-  const r = await synth(text, voice, speed, onDownload), fx = EFFECTS[effect]?.fx || {};
+  const r = await (pre || synth(text, voice, speed, onDownload)), fx = EFFECTS[effect]?.fx || {};
   const out = await applyFx(r.buf, fx, tom, r.native ? 1 : speed), n = Math.min(Math.round(r.buf.duration / (r.native ? 1 : speed) * out.sampleRate), out.length);
   const v = { out, n };
   if (!r.fallback) { MEM.set(k, v); store.set('tts:' + k, { ...pack(out), n }); trim(k); } // não guarda o fallback
@@ -27,9 +28,16 @@ async function sceneAudio(text, voice, effect, tom, speed, onDownload) {
 export async function buildVoiceTrack(scenes, { voice, effect, tom = 0, speed = 1, gap = .45, lead = .3, onProgress, onDownload }) {
   const bufs = [];
   let fallback = false;
+  // pipeline: a síntese da próxima frase roda (no worker) enquanto a atual recebe os efeitos
+  const pre = new Map(), kick = i => {
+    if (i >= scenes.length || pre.has(i)) return;
+    const k = keyOf(scenes[i], voice, effect, tom, speed);
+    pre.set(i, MEM.has(k) ? null : store.get('tts:' + k).then(s => s?.blob ? null : synth(scenes[i], voice, speed, onDownload)));
+  };
   for (const [i, s] of scenes.entries()) {
     onProgress?.(i, scenes.length);
-    const r = await sceneAudio(s, voice, effect, tom, speed, onDownload);
+    kick(i); kick(i + 1);
+    const r = await sceneAudio(s, voice, effect, tom, speed, onDownload, await pre.get(i));
     fallback ||= r.fallback;
     bufs.push(r);
   }

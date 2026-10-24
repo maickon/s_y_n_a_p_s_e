@@ -1,6 +1,13 @@
 // Modais do sistema (substituem alert/confirm)
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
+// painel flutuante no canto (não trava a tela)
+function float(inner) {
+  const o = document.createElement('div');
+  o.className = 'fixed bottom-4 right-4 z-[95] w-80 bg-zinc-950/95 border border-purple-800/60 rounded-xl shadow-2xl shadow-purple-900/40 p-4 flex flex-col gap-3 text-xs text-zinc-300';
+  o.innerHTML = inner; document.body.appendChild(o);
+  return o;
+}
 function shell(inner, lock = false) {
   const o = document.createElement('div');
   o.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4';
@@ -27,9 +34,9 @@ export const warn = (msg, title = 'Atenção') => modal({ msg, title, icon: '⚠
 export const ask = (msg, title = 'Confirmar') => modal({ msg, title, buttons: [{ label: 'Cancelar', value: false }, { label: 'Confirmar', value: true, primary: true }] });
 
 // Modal de progresso que trava a tela; mostra prévia do quadro e permite cancelar
-export function progress({ title, source }) {
+export function progress({ title, source, floating }) {
   let cancel = false;
-  const o = shell(`<h3 class="font-bold uppercase tracking-wider text-purple-300">◈ ${esc(title)}</h3>
+  const o = (floating ? float : shell)(`<h3 class="font-bold uppercase tracking-wider text-purple-300">◈ ${esc(title)}</h3>
     <canvas width="384" height="216" class="w-full rounded-lg border border-zinc-800 bg-black"></canvas>
     <div class="h-3 rounded-full bg-zinc-800 overflow-hidden"><div class="h-full w-0 bg-gradient-to-r from-purple-600 to-emerald-400 transition-all"></div></div>
     <div class="flex justify-between text-xs text-zinc-400"><span data-t>Preparando...</span><span data-e></span></div>

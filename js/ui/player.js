@@ -1,6 +1,6 @@
 // Player: toca o mix com seek e desenha o quadro do tempo atual
 export function createPlayer({ draw, onTime, onEnd }) {
-  let ctx, out, dest, src, buf = null, on = false, at = 0, t0 = 0, raf = 0;
+  let ctx, out, dest, src, buf = null, on = false, at = 0, t0 = 0, raf = 0, range = null;
   const init = () => { if (ctx) return; ctx = new AudioContext(); out = new GainNode(ctx); dest = ctx.createMediaStreamDestination(); out.connect(ctx.destination); out.connect(dest); };
   const now = () => on ? ctx.currentTime - t0 : at;
   const stopSrc = () => { try { src?.stop(); } catch { } src?.disconnect(); src = null; };
@@ -9,6 +9,7 @@ export function createPlayer({ draw, onTime, onEnd }) {
   const loop = () => {
     if (!on) return;
     const t = now();
+    if (range && (t >= range[1] || t < range[0] - .5)) { startSrc(range[0]); raf = requestAnimationFrame(loop); return; }
     if (t >= buf.duration) { pause(); at = buf.duration; show(at); onEnd?.(); return; }
     show(t); raf = requestAnimationFrame(loop);
   };
@@ -23,6 +24,7 @@ export function createPlayer({ draw, onTime, onEnd }) {
   return {
     play, pause, seek, toggle: () => on ? pause() : play(),
     get playing() { return on; }, get time() { return now(); },
+    get range() { return range; }, setRange(r) { range = r; },
     // troca o áudio mantendo a posição (edição ao vivo)
     setBuffer(b) { const t = Math.min(now(), b.duration); buf = b; if (on) startSrc(t); else { at = t; show(t); } },
     stream() { init(); return dest.stream; }
