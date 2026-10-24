@@ -7,8 +7,11 @@ export function drawCaptions(g, gs, t, W, H) {
   const inA = ease((t - c.s + .08) / .18), outA = ease((c.e - t) / .15), a = Math.min(inA, outA);
   g.save();
   g.font = '800 46px Syne, "Fira Code", sans-serif'; g.textBaseline = 'middle';
-  const sp = g.measureText(' ').width, ws = c.words.map(w => ({ ...w, t: w.w.toUpperCase(), m: g.measureText(w.w.toUpperCase()).width }));
-  const tw = ws.reduce((s, w) => s + w.m, 0) + sp * (ws.length - 1), y = H - 95 + (1 - inA) * 25;
+  let sp = g.measureText(' ').width; const ws = c.words.map(w => ({ ...w, t: w.w.toUpperCase(), m: g.measureText(w.w.toUpperCase()).width }));
+  let tw = ws.reduce((s, w) => s + w.m, 0) + sp * (ws.length - 1);
+  // não ultrapassa a largura do vídeo
+  if (tw > W * .86) { const k = W * .86 / tw; g.font = `800 ${46 * k | 0}px Syne, "Fira Code", sans-serif`; ws.forEach(w => w.m = g.measureText(w.t).width); sp = g.measureText(' ').width; tw = ws.reduce((s, w) => s + w.m, 0) + sp * (ws.length - 1); }
+  const y = H - 95 + (1 - inA) * 25;
   let x = (W - tw) / 2;
   g.globalAlpha = a;
   g.fillStyle = 'rgba(0,0,0,.62)'; g.beginPath(); g.roundRect(x - 28, y - 40, tw + 56, 80, 14); g.fill();

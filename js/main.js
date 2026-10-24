@@ -15,6 +15,7 @@ import { exportHyperFrames } from './export/hyperframes.js';
 import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES } from './render/layouts.js';
 import { assets, addAsset, removeAsset, parseUrls, plan } from './core/assets.js';
+import { createPlayer } from './ui/player.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -27,7 +28,7 @@ const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-s
 const cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
-let ctx, rec, chunks = [], track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
+let ctx, rec, track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 const status = (t, c = 'bg-zinc-600') => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; };
 const count = () => $('char-count').textContent = `${el.txt.value.length} caracteres`;
@@ -67,8 +68,7 @@ async function run(fn) {
   busy = true; ['btn-manifest', 'btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), false));
   try { await fn(); } catch (e) { console.error(e); status('ERRO: ' + e.message, 'bg-red-500'); }
   busy = false; enable($('btn-manifest'), true);
-  if (mix) ['btn-vary', 'btn-apply', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'].forEach(b => enable($(b), true));
-  enable($('btn-export'), chunks.length > 0);
+  if (mix) ['btn-vary', 'btn-apply', ...EXP].forEach(b => enable($(b), true));
 }
 
 // edição -> mix -> reprodução/gravação
@@ -78,8 +78,11 @@ async function render() {
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   mix = await mixdown({ voice: track.buffer, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(el.txt.value) + variation,
     musicBuf: music?.buf, amb: $('amb-select').value, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } });
-  grid(P); editor();
-  await play(track.timeline, mix.duration);
+  grid(P); editor(); marks();
+  const first = !pl.time && !pl.playing;
+  pl.setBuffer(mix);
+  if (first) pl.play(0);
+  status('PREVIEW PRONTO', 'bg-emerald-500');
 }
 
 $('btn-manifest').onclick = () => {
@@ -103,39 +106,6 @@ $('btn-manifest').onclick = () => {
 $('btn-vary').onclick = () => track && run(() => (variation++, render()));
 $('btn-apply').onclick = () => track && run(render);
 
-function play(timeline, duration) {
-  ctx ??= new AudioContext();
-  ctx.resume();
-  const dest = ctx.createMediaStreamDestination();
-  const bus = new GainNode(ctx, { gain: .8 }), lim = new DynamicsCompressorNode(ctx, { threshold: -6, ratio: 20, attack: .002 }), outs = [bus];
-  bus.connect(lim); lim.connect(ctx.destination); lim.connect(dest);
-  const t0 = ctx.currentTime + .1, src = new AudioBufferSourceNode(ctx, { buffer: mix });
-  outs.forEach(o => src.connect(o)); src.start(t0);
-
-  const stream = new MediaStream([...cv.captureStream(60).getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  const mime = ['video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
-  rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 }); chunks = [];
-  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
-  rec.start();
-
-  status('TRANSMITINDO...', 'bg-emerald-400 animate-ping');
-  let cur = -1;
-  return new Promise(res => {
-    const loop = () => {
-      const t = ctx.currentTime - t0, i = drawAt(t);
-      if (i !== cur && i >= 0) {
-        cur = i; const h = hash(timeline[i].text);
-        $('scene-counter').textContent = `${i + 1}/${timeline.length}`;
-        $('scene-hash').textContent = `HASH: 0x${h.toString(16).slice(0, 6).toUpperCase()}`;
-      }
-      if (t < duration) return requestAnimationFrame(loop);
-      rec.onstop = () => { enable($('btn-export'), true); res(); };
-      rec.stop(); status('CONCLUÍDO', 'bg-purple-500');
-    };
-    loop();
-  });
-}
-
 // quadro determinístico no tempo t (preview e export)
 function drawAt(t) {
   const tl = track?.timeline || [], i = tl.findLastIndex(s => t >= s.start - .05), s = tl[i], style = el.style.selectedIndex;
@@ -153,7 +123,16 @@ $('btn-mp4').onclick = () => mix && run(async () => {
   } finally { drawAt(0); }
 });
 
-$('btn-export').onclick = () => chunks.length && download(new Blob(chunks, { type: 'video/webm' }), `SYNAPSE_${Date.now()}.webm`);
+// grava a reprodução em tempo real (WebM)
+$('btn-export').onclick = () => {
+  if (!mix || rec?.state === 'recording') return;
+  const chunks = [], mime = ['video/webm;codecs=vp9,opus', 'video/webm'].find(m => MediaRecorder.isTypeSupported(m));
+  rec = new MediaRecorder(new MediaStream([...cv.captureStream(60).getVideoTracks(), ...pl.stream().getAudioTracks()]), { mimeType: mime, videoBitsPerSecond: 8e6 });
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => { download(new Blob(chunks, { type: 'video/webm' }), `SYNAPSE_${Date.now()}.webm`); status('WEBM SALVO', 'bg-emerald-500'); };
+  pl.pause(); pl.seek(0); rec.start(); pl.play(0);
+  status('GRAVANDO WEBM...', 'bg-red-500 animate-pulse');
+};
 $('btn-wav').onclick = () => mix && download(toWav(mix), `SYNAPSE_AUDIO_${Date.now()}.wav`);
 $('btn-hf').onclick = () => mix && run(async () => {
   status('EMPACOTANDO HYPERFRAMES...', 'bg-yellow-400 animate-pulse');
@@ -167,9 +146,10 @@ function grid(P = []) {
   const sc = a => P.map((x, i) => x.includes(a) ? i + 1 : 0).filter(Boolean).join(',');
   $('img-grid').replaceChildren(...assets.map(a => {
     const d = document.createElement('div');
-    d.className = 'relative aspect-video rounded overflow-hidden border border-zinc-700 group';
+    d.className = 'relative aspect-video rounded overflow-hidden border border-zinc-700 group cursor-pointer hover:border-emerald-400';
     d.title = [a.tag, a.credit].filter(Boolean).join(' · ');
     d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span><button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
+    d.querySelector('img').onclick = () => goTo(a.img);
     d.querySelector('button').onclick = () => {
       removeAsset(a);
       if (a.origin === 'url') $('img-urls').value = $('img-urls').value.split('\n').filter(l => !l.includes(a.src)).join('\n');
@@ -195,6 +175,37 @@ $('img-files').onchange = async e => {
 };
 $('img-urls').onchange = () => syncUrls().then(() => status('IMAGENS PRONTAS', 'bg-emerald-500'));
 // render determinístico por tempo (debug/export)
+// --- Player ---
+const fmt = t => `${t / 60 | 0}:${String(t % 60 | 0).padStart(2, '0')}`;
+let lastScene = -1;
+const pl = createPlayer({
+  draw: drawAt,
+  onTime: t => {
+    const D = mix?.duration || 0, sk = $('pl-seek');
+    if (document.activeElement !== sk) sk.value = t;
+    $('pl-time').textContent = `${fmt(t)} / ${fmt(D)}`;
+    $('pl-play').textContent = pl.playing ? '❚❚' : '▶';
+    const tl = track?.timeline || [], i = tl.findLastIndex(s => t >= s.start - .05);
+    if (i !== lastScene) {
+      lastScene = i; $('scene-counter').textContent = `${Math.max(i + 1, 0)}/${tl.length}`;
+      if (i >= 0) $('scene-hash').textContent = `HASH: 0x${hash(tl[i].text).toString(16).slice(0, 6).toUpperCase()}`;
+      document.querySelectorAll('#scene-list > div').forEach((d, k) => d.classList.toggle('ring-1', k === i));
+    }
+  },
+  onEnd: () => rec?.state === 'recording' && rec.stop()
+});
+function marks() {
+  const D = mix.duration;
+  $('pl-seek').max = D;
+  $('pl-marks').innerHTML = track.timeline.map((s, i) => `<span title="Cena ${i + 1}" style="left:${s.start / D * 100}%" class="absolute top-0 w-px h-2 bg-purple-400"></span>`).join('');
+}
+$('pl-play').onclick = () => pl.toggle();
+$('pl-back').onclick = () => pl.seek(pl.time - 5);
+$('pl-fwd').onclick = () => pl.seek(pl.time + 5);
+$('pl-seek').oninput = e => pl.seek(+e.target.value);
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && mix) { e.preventDefault(); pl.toggle(); } });
+const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) pl.seek(s.a + .5); };
+
 window.synapse = { comp, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
@@ -243,10 +254,11 @@ function editor() {
     const o = ov[i] || {}, sg = segsCur.find(x => x.scene === i), d = document.createElement('div');
     d.className = 'grid grid-cols-12 gap-1 items-center bg-black/30 rounded p-1';
     const imgs = Object.fromEntries(assets.map((a, k) => [k, `${k + 1}. ${(a.tag || a.origin).slice(0, 14)}`]));
-    d.innerHTML = `<span class="col-span-1 text-purple-400 text-center">${i + 1}</span><span class="col-span-5 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
+    d.innerHTML = `<button class="col-span-1 text-purple-400 text-center hover:text-emerald-300" title="Ir para a cena">▶${i + 1}</button><span class="col-span-5 truncate text-zinc-300" title="${s.text.replace(/"/g, '')}">${s.text}</span>
       <select data-k="layout" class="col-span-2 ${sel}">${opts(LAYOUT_NAMES, LN, o.layout, !o.layout && sg?.layout)}</select>
       <select data-k="trans" class="col-span-2 ${sel}">${opts(TRANS_NAMES, TNm, o.trans, !o.trans && sg?.trans)}</select>
       <select data-k="img" class="col-span-2 ${sel}">${opts(Object.keys(imgs), imgs, o.img ? String(assets.indexOf(o.img)) : '', '')}</select>`;
+    d.querySelector('button').onclick = () => pl.seek(Math.max(0, s.start - .3));
     d.querySelectorAll('select').forEach(x => x.onchange = () => { ov[i] = { ...ov[i], [x.dataset.k]: x.value === '' ? undefined : x.dataset.k === 'img' ? assets[x.value] : x.value }; });
     return d;
   }));
