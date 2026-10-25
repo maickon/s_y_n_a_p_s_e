@@ -736,13 +736,14 @@ async function manager() {
     const l = await projects.list();
     o.innerHTML = `<div class="w-full max-w-3xl max-h-[85vh] flex flex-col bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-5 gap-4 text-zinc-300">
       <div class="flex items-center gap-3"><h3 class="pane-h flex-1"><i data-lucide="folder-open" class="w-4 h-4"></i> Meus projetos <span class="text-zinc-600 normal-case tracking-normal">(${l.length})</span></h3>
+        <button data-imp class="btn !py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200" title="Abrir arquivo .synapse"><i data-lucide="upload" class="w-4 h-4"></i> Importar</button>
         <button data-new class="btn !py-1.5 bg-purple-700 hover:bg-purple-600 text-white"><i data-lucide="plus" class="w-4 h-4"></i> Novo projeto</button><button data-x class="pbtn text-zinc-400">✕</button></div>
       <div class="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto pr-1">${l.map(p => `
         <div data-id="${p.id}" class="rounded-lg border ${p.id === curId ? 'border-emerald-500' : 'border-zinc-800 hover:border-purple-600'} bg-zinc-900/60 overflow-hidden flex flex-col">
           <div data-open class="aspect-video bg-black bg-center bg-contain bg-no-repeat cursor-pointer relative" style="background-image:url('${p.thumb || ''}')">${p.id === curId ? '<span class="absolute top-1 left-1 text-[10px] bg-emerald-600 text-white px-1.5 rounded">ABERTO</span>' : ''}<span class="absolute bottom-1 right-1 text-[10px] bg-black/70 px-1.5 rounded">${p.aspect || '16:9'}</span></div>
           <div class="p-2 flex flex-col gap-1"><b class="truncate text-zinc-200 text-xs" title="${escH(p.name)}">${escH(p.name)}</b><span class="text-[10px] text-zinc-500">${p.scenes || 0} cenas · editado ${ago(p.updated)}</span>
             <div class="flex gap-1 mt-1"><button data-open class="flex-1 text-[11px] py-1 rounded bg-emerald-800 hover:bg-emerald-700 text-white">Abrir</button>
-              <button data-ren class="pbtn" title="Renomear"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button data-dup class="pbtn" title="Duplicar"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button><button data-del class="pbtn text-red-400" title="Excluir"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div></div></div>`).join('')}</div></div>`;
+              <button data-ren class="pbtn" title="Renomear"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button data-exp class="pbtn" title="Exportar .synapse"><i data-lucide="download" class="w-3.5 h-3.5"></i></button><button data-dup class="pbtn" title="Duplicar"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button><button data-del class="pbtn text-red-400" title="Excluir"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></div></div></div>`).join('')}</div></div>`;
     lucide.createIcons({ root: o });
   };
   document.body.appendChild(o); await draw();
@@ -750,9 +751,19 @@ async function manager() {
   o.onclick = async e => {
     if (e.target === o || e.target.closest('[data-x]')) return close();
     if (e.target.closest('[data-new]')) return projects.create();
+    if (e.target.closest('[data-imp]')) return Object.assign(document.createElement('input'), { type: 'file', accept: '.synapse', onchange: async ev => {
+      try { const f = ev.target.files[0]; if (f) { await projects.unpack(await f.arrayBuffer()); draw(); } } catch (x) { warn(x.message); }
+    } }).click();
     const card = e.target.closest('[data-id]'); if (!card) return;
     const id = card.dataset.id, p = (await projects.list()).find(x => x.id === id);
     if (e.target.closest('[data-open]')) return id === curId ? close() : projects.open(id);
+    if (e.target.closest('[data-exp]')) {
+      if (id === curId) await flushProj();
+      const blob = await projects.pack(id), name = `${p.name.replace(/[\/:*?"<>|]+/g, '_').slice(0, 60) || 'projeto'}.synapse`;
+      if (!isDesktop) return download(blob, name);
+      const path = await native('save_doc', new Uint8Array(await blob.arrayBuffer()), { headers: { name: encodeURIComponent(name) } });
+      return modal({ title: 'Projeto exportado', msg: path, icon: '✓', buttons: [{ label: 'OK', value: false }, { label: 'Abrir pasta', value: true, primary: true }] }).then(v => v && native('reveal', { path }));
+    }
     if (e.target.closest('[data-dup]')) { await projects.duplicate(id); return draw(); }
     if (e.target.closest('[data-ren]')) {
       const pr = modal({ title: 'Renomear projeto', html: `<input id="ren-in" class="inp" value="${escH(p.name)}">`, buttons: [{ label: 'Cancelar', value: null }, { label: 'Salvar', value: 'ok', primary: true }] });

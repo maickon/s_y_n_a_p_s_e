@@ -11,17 +11,21 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-          - os: macos-latest
-            args: --target universal-apple-darwin
+          - os: macos-latest   # Apple Silicon
+          - os: macos-15-intel # Intel
           - os: ubuntu-22.04
     runs-on: ${{ matrix.os }}
+    env: # whisper.cpp portátil (sem -march=native do runner)
+      GGML_NATIVE: 'OFF'
+      GGML_AVX: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
+      GGML_AVX2: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
+      GGML_FMA: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
+      GGML_F16C: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - if: matrix.os == 'ubuntu-22.04'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - uses: swatinem/rust-cache@v2
@@ -36,4 +40,3 @@ jobs:
           releaseName: 'S.Y.N.A.P.S.E Desktop ${{ startsWith(github.ref, ''refs/tags/'') && github.ref_name || ''(dev)'' }}'
           releaseDraft: true
           prerelease: true
-          args: ${{ matrix.args }}

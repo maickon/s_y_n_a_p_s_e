@@ -1,3 +1,6 @@
+import { isDesktop } from '../native.js';
+import * as store from '../core/store.js';
+import { hashKey } from '../audio/bufstore.js';
 export const proxy = u => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=1920&h=1920&fit=inside&output=webp`;
 
 const img = src => new Promise((ok, no) => {
@@ -8,12 +11,15 @@ const img = src => new Promise((ok, no) => {
 });
 
 // cache persistente das imagens (Cache Storage): recarregar a página não baixa de novo
-const C = 'caches' in self ? caches.open('synapse-img-v1') : null;
+// (no desktop: disco, sem limite de cota)
+const C = !isDesktop && 'caches' in self ? caches.open('synapse-img-v1') : null;
+export const cachedBlob = async u => isDesktop ? store.get('img:' + hashKey(u)) : (await (await C)?.match(u))?.blob();
+export const putBlob = async (u, b) => isDesktop ? store.set('img:' + hashKey(u), b) : (await C)?.put(u, new Response(b));
 async function cached(u) {
-  const c = await C, hit = await c?.match(u);
-  if (hit) return img(URL.createObjectURL(await hit.blob()));
+  const hit = await cachedBlob(u).catch(() => null);
+  if (hit) return img(URL.createObjectURL(hit));
   for (const src of [u, proxy(u)]) {
-    try { const r = await fetch(src, { mode: 'cors' }); if (!r.ok) continue; const b = await r.blob(); if (!b.type.startsWith('image/')) continue; c?.put(u, new Response(b)); return img(URL.createObjectURL(b)); } catch { }
+    try { const r = await fetch(src, { mode: 'cors' }); if (!r.ok) continue; const b = await r.blob(); if (!b.type.startsWith('image/')) continue; putBlob(u, b); return img(URL.createObjectURL(b)); } catch { }
   }
   throw Error('load ' + u);
 }

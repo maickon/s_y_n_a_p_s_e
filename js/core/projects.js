@@ -1,4 +1,6 @@
 import * as store from './store.js';
+import { encode, decode } from './codec.js';
+import { cachedBlob, putBlob } from '../media/loader.js';
 
 // Projetos: cada um é um snapshot das chaves do espaço de trabalho no IndexedDB
 const WS = ['form', 'imgs', 'music', 'wm', 'vigs', 'ws'];
@@ -28,4 +30,21 @@ export async function duplicate(id) {
   const n = newId(), l = await list(), p = l.find(x => x.id === id);
   await store.set('proj:' + n, await store.get('proj:' + id));
   l.push({ ...p, id: n, name: p.name + ' (cópia)', renamed: true, created: Date.now(), updated: Date.now() }); await saveList(l);
+}
+
+// arquivo .synapse: projeto + imagens da web em cache (abre offline em outro PC/navegador)
+export async function pack(id) {
+  const data = await store.get('proj:' + id) || {}, meta = (await list()).find(p => p.id === id) || {}, cache = {};
+  for (const u of new Set(JSON.stringify(data).match(/https?:\/\/[^\s"'\\]+/g) || [])) { const b = await cachedBlob(u).catch(() => null); if (b) cache[u] = b; }
+  return encode({ synapse: 1, meta, data, cache });
+}
+export async function unpack(ab) {
+  const f = decode(ab);
+  if (f?.synapse !== 1) throw Error('Arquivo .synapse inválido');
+  const id = newId(), l = await list();
+  for (const [u, b] of Object.entries(f.cache || {})) await putBlob(u, b);
+  await store.set('proj:' + id, f.data);
+  l.push({ ...f.meta, id, name: (f.meta.name || 'Projeto') + ' (importado)', renamed: true, created: Date.now(), updated: Date.now() });
+  await saveList(l);
+  return id;
 }

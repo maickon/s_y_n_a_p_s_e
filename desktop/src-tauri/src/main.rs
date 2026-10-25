@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod dl;
 mod ffmpeg;
+mod kv;
 mod piper;
 mod whisper;
 use std::sync::Arc;
@@ -20,7 +21,7 @@ fn info() -> serde_json::Value {
         "arch": std::env::consts::ARCH,
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
         "version": env!("CARGO_PKG_VERSION"),
-        "features": ["piper", "ffmpeg", "whisper"]
+        "features": ["piper", "ffmpeg", "whisper", "kv"]
     })
 }
 
@@ -56,6 +57,23 @@ async fn ff_frame(st: State<'_, Arc<ffmpeg::Ff>>, req: Request<'_>) -> R<()> {
 async fn ff_finish(st: State<'_, Arc<ffmpeg::Ff>>) -> R<String> { let f = st.inner().clone(); blocking(move || f.finish()).await }
 #[tauri::command]
 fn ff_cancel(st: State<'_, Arc<ffmpeg::Ff>>) { st.cancel() }
+// armazenamento em disco (chave no cabeçalho, valor no corpo binário)
+#[tauri::command]
+async fn kv_get(app: AppHandle, key: String) -> Response { Response::new(kv::get(&app, &key)) }
+#[tauri::command]
+async fn kv_set(app: AppHandle, req: Request<'_>) -> R<()> { kv::set(&app, &dec(&hdr(&req, "key")), raw(&req)?) }
+#[tauri::command]
+async fn kv_del(app: AppHandle, key: String) { kv::del(&app, &key) }
+#[tauri::command]
+async fn kv_keys(app: AppHandle) -> Vec<String> { kv::keys(&app) }
+#[tauri::command]
+async fn save_doc(app: AppHandle, req: Request<'_>) -> R<String> { kv::save_doc(&app, &dec(&hdr(&req, "name")), raw(&req)?) }
+fn dec(s: &str) -> String { // decodeURIComponent
+    let b = s.as_bytes(); let mut o = Vec::with_capacity(b.len()); let mut i = 0;
+    while i < b.len() { if b[i] == b'%' && i + 2 < b.len() { if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) { o.push(v); i += 3; continue; } } o.push(b[i]); i += 1; }
+    String::from_utf8_lossy(&o).into()
+}
+
 #[tauri::command]
 fn reveal(path: String) { ffmpeg::reveal(&path) }
 
@@ -64,7 +82,7 @@ fn main() {
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal])
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }
