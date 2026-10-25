@@ -1,0 +1,12 @@
+{
+  "name": "synapse-desktop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "copy": "node copy.mjs",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon icon.png"
+  },
+  "devDependencies": { "@tauri-apps/cli": "^2.9.0" }
+}

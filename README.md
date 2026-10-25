@@ -26,3 +26,8 @@ Settings → Pages → Branch `master` / root.
 ## Libs locais
 As libs ficam em `vendor/` (ver `vendor/README.md`). O CSS do Tailwind é pré-gerado em `css/tw.css`; ao usar classes novas rode:
 `npx tailwindcss@3.4.16 -i css/tw.src.css -o css/tw.css --minify`
+
+## Versão desktop (Tauri)
+Mesmo código do site, empacotado como app (Windows, macOS, Linux) em `desktop/`.
+- Instaladores: Actions → **Desktop (Tauri)** → *Run workflow* (ou tag `desktop-v*`); saem como release rascunho.
+- Local: `cd desktop && npm i && npm run dev` (requer Rust).

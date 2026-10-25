@@ -1,0 +1,39 @@
+name: Desktop (Tauri)
+on:
+  workflow_dispatch:
+  push:
+    tags: ['desktop-v*']
+jobs:
+  build:
+    permissions: { contents: write }
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: macos-latest
+            args: --target universal-apple-darwin
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - if: matrix.os == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: desktop/src-tauri }
+      - run: npm ci
+        working-directory: desktop
+      - uses: tauri-apps/tauri-action@v0
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        with:
+          projectPath: desktop
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'desktop-dev' }}
+          releaseName: 'S.Y.N.A.P.S.E Desktop ${{ startsWith(github.ref, ''refs/tags/'') && github.ref_name || ''(dev)'' }}'
+          releaseDraft: true
+          prerelease: true
+          args: ${{ matrix.args }}

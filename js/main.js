@@ -35,6 +35,7 @@ import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.
 import { warn, ask, progress, modal } from './ui/modal.js';
 import * as store from './core/store.js';
 import * as projects from './core/projects.js';
+import { isDesktop, info as nativeInfo } from './native.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -766,6 +767,7 @@ await store.bindForm(() => {
   vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
+if (isDesktop) nativeInfo.then(i => { document.querySelector('h1')?.insertAdjacentHTML('afterend', `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300" title="${i ? i.os + ' · ' + i.cpus + ' núcleos' : ''}">DESKTOP</span>`); });
 if (!await store.get('mig-clean')) { // aplica uma vez os novos padrões (voz natural, sem ambiente)
   for (const [id, v] of [['effect-select', 'clean'], ['amb-select', 'none']]) { $(id).value = v; $(id).dispatchEvent(new Event('change', { bubbles: true })); G[id === 'amb-select' ? 'amb' : 'effect']?.select(v); }
   store.set('mig-clean', 1);
