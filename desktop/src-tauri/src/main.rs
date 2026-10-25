@@ -2,6 +2,7 @@
 mod dl;
 mod ffmpeg;
 mod piper;
+mod whisper;
 use std::sync::Arc;
 use tauri::{ipc::{InvokeBody, Request, Response}, AppHandle, State};
 
@@ -19,7 +20,7 @@ fn info() -> serde_json::Value {
         "arch": std::env::consts::ARCH,
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
         "version": env!("CARGO_PKG_VERSION"),
-        "features": ["piper", "ffmpeg"]
+        "features": ["piper", "ffmpeg", "whisper"]
     })
 }
 
@@ -28,6 +29,14 @@ fn info() -> serde_json::Value {
 async fn piper_tts(app: AppHandle, st: State<'_, Arc<piper::Piper>>, text: String, voice: String, speed: f64) -> R<Response> {
     let p = st.inner().clone();
     blocking(move || p.say(&app, &text, &voice, speed).map(Response::new)).await
+}
+
+// Whisper nativo: corpo = PCM f32 mono 16 kHz
+#[tauri::command]
+async fn whisper(app: AppHandle, st: State<'_, Arc<whisper::Asr>>, req: Request<'_>) -> R<serde_json::Value> {
+    let (a, b) = (st.inner().clone(), raw(&req)?);
+    let pcm: Vec<f32> = b.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect();
+    blocking(move || a.run(&app, &pcm)).await
 }
 
 // FFmpeg: início (corpo = WAV; cabeçalhos w/h/fps/name), quadros RGBA, fim e cancelamento
@@ -54,7 +63,8 @@ fn main() {
     tauri::Builder::default()
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, ff_start, ff_frame, ff_finish, ff_cancel, reveal])
+        .manage(Arc::new(whisper::Asr::default()))
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }
