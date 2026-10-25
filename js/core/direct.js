@@ -9,7 +9,7 @@ export const INTRO = 2.8;
 export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto', outro = { on: true, title: 'FIM DA TRANSMISSÃO', lines: [], auto: true }, intro = { dur: INTRO } }) {
   const end = tl.at(-1).end, dur = end + (outro.on ? 4.5 : 1.2), segs = [];
   tl.forEach((s, i) => {
-    const o = ov[i] || {}, imgs = o.img ? [o.img] : P[i];
+    const o = ov[i] || {}, imgs = o.noimg ? [] : o.img ? [o.img] : P[i];
     if (!imgs.length) return;
     const a = Math.max(intro.dur - .35, s.start - .35), b = (tl[i + 1]?.start ?? dur) - .35, n = Math.max(imgs.length, Math.round((b - a) / 4));
     const cuts = [a];

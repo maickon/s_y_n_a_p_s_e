@@ -2,7 +2,7 @@
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const fmt = t => `${t / 60 | 0}:${String(t % 60 | 0).padStart(2, '0')}`;
 
-export function createTimeline(inner, scroll, { onSeek, onSelect }) {
+export function createTimeline(inner, scroll, { onSeek, onSelect, onEdit }) {
   let D = 1, zoom = 1, wave = null, cv = null, sel = -1;
   const head = Object.assign(document.createElement('div'), { className: 'tl-head' });
   const pct = x => `${x / D * 100}%`;
@@ -38,6 +38,7 @@ export function createTimeline(inner, scroll, { onSeek, onSelect }) {
   inner.addEventListener('pointerdown', e => { drag = true; inner.setPointerCapture(e.pointerId); const c = e.target.closest('[data-scene]'); if (c) onSelect(+c.dataset.scene); onSeek(at(e)); });
   inner.addEventListener('pointermove', e => drag && onSeek(at(e)));
   inner.addEventListener('pointerup', () => drag = false);
+  inner.addEventListener('dblclick', e => { const c = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-scene]'); if (c) onEdit?.(+c.dataset.scene); });
   addEventListener('resize', () => requestAnimationFrame(drawWave));
   return { render, set, select, setZoom };
 }
