@@ -12,12 +12,12 @@ export const TYPES = {
 };
 // ajustes automáticos (índice do estilo, legenda, perfil musical, efeitos, ambiente, tratamento)
 export const PRESETS = {
-  top: { style: 6, cap: 'outline', prof: '6', sfx: 'cinematic', amb: 'auto' },
-  sabia: { style: 7, cap: 'highlight', prof: '5', sfx: 'organic', amb: 'auto' },
-  timeline: { style: 5, cap: 'doc', prof: '5', sfx: 'organic', amb: 'projector', grade: 'auto' },
-  mystery: { style: 4, cap: 'typewriter', prof: '4', sfx: 'cinematic', amb: 'rain' },
-  news: { style: 10, cap: 'lower', prof: '6', sfx: 'subtle', amb: 'none' },
-  steps: { style: 10, cap: 'minimal', prof: '0', sfx: 'subtle', amb: 'none' }
+  top: { style: 6, cap: 'outline', prof: '6', sfx: 'cinematic' },
+  sabia: { style: 7, cap: 'highlight', prof: '5', sfx: 'organic' },
+  timeline: { style: 5, cap: 'doc', prof: '5', sfx: 'organic', grade: 'auto' },
+  mystery: { style: 4, cap: 'typewriter', prof: '4', sfx: 'cinematic' },
+  news: { style: 10, cap: 'lower', prof: '6', sfx: 'subtle' },
+  steps: { style: 10, cap: 'minimal', prof: '0', sfx: 'subtle' }
 };
 // pesos extras de layout/transição por tipo
 export const WEIGHTS = {

@@ -60,7 +60,7 @@ const download = (blob, name) => { const a = Object.assign(document.createElemen
 
 el.voice.innerHTML = Object.entries(VOICES).map(([g, vs]) => `<optgroup label="${g}">${Object.entries(vs).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</optgroup>`).join('');
 $('effect-select').innerHTML = Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
-el.voice.value = 'piper:pt_BR-faber-medium'; $('effect-select').value = 'star';
+el.voice.value = 'piper:pt_BR-faber-medium'; $('effect-select').value = 'clean'; // padrão: voz natural, sem efeito
 el.txt.value = PRESET; count();
 el.txt.oninput = count;
 $('btn-preset').onclick = () => { el.txt.value = PRESET; count(); };
@@ -303,6 +303,7 @@ el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
 $('grade-select').innerHTML = '<option value="auto">Tratamento: automático (pelo estilo)</option>' + GRADE_NAMES.map(k => `<option value="${k}">Tratamento: ${GRADES[k][0]}</option>`).join('');
 $('sfx-pack').innerHTML = '<option value="auto">Automático</option>' + Object.entries(PACKS).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
 $('amb-select').innerHTML = Object.entries(AMBS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+$('amb-select').value = 'none'; // padrão: sem som ambiente
 const setMusic = m => {
   music = m; live(1);
   m?.blob ? store.set('music', { name: m.name, blob: m.blob }) : !m && store.del('music');
@@ -765,6 +766,10 @@ await store.bindForm(() => {
   vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
+if (!await store.get('mig-clean')) { // aplica uma vez os novos padrões (voz natural, sem ambiente)
+  for (const [id, v] of [['effect-select', 'clean'], ['amb-select', 'none']]) { $(id).value = v; $(id).dispatchEvent(new Event('change', { bubbles: true })); G[id === 'amb-select' ? 'amb' : 'effect']?.select(v); }
+  store.set('mig-clean', 1);
+}
 await setWm(await store.get('wm')).catch(() => { });
 readText();
 for (const f of await store.get('imgs') || []) await (f instanceof Blob ? addFile(f) : addFile(f.blob, f.id));

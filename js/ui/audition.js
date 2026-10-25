@@ -19,7 +19,8 @@ export function gallery(root, { items, value, onPick, render }) {
   const groups = [...new Set(items.map(i => i.group || ''))];
   root.innerHTML = groups.map(g => (g ? `<div class="gal-g">${g}</div>` : '') + items.filter(i => (i.group || '') === g).map(i =>
     `<div class="gi" data-k="${i.key}"><button class="gplay" title="Ouvir"></button><span class="flex-1 truncate">${i.label}</span>${i.sub ? `<small>${i.sub}</small>` : ''}</div>`).join('')).join('');
-  const select = k => root.querySelectorAll('.gi').forEach(e => e.classList.toggle('on', e.dataset.k === k));
+  let cur = value;
+  const select = k => { cur = k; root.querySelectorAll('.gi').forEach(e => e.classList.toggle('on', e.dataset.k === k)); };
   root.onclick = async e => {
     const it = e.target.closest('.gi'); if (!it) return;
     const k = it.dataset.k, b = it.querySelector('.gplay');
@@ -28,7 +29,7 @@ export function gallery(root, { items, value, onPick, render }) {
       b.classList.add('loading');
       try { audition(await render(k), b); } catch (err) { console.warn(err); }
       b.classList.remove('loading');
-    } else { select(k); onPick(k); }
+    } else if (k !== cur) { select(k); onPick(k); } // já selecionado: não recarrega
   };
   select(value);
   return { select };

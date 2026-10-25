@@ -36,7 +36,7 @@ function openSel(s, b) {
   const items = [...p.querySelectorAll('.copt')];
   let i = Math.max(0, items.findIndex(x => x.classList.contains('on')));
   const act = k => { items.forEach(x => x.classList.remove('act')); i = (k + items.length) % items.length; items[i].classList.add('act'); items[i].scrollIntoView({ block: 'nearest' }); };
-  const choose = v => { s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); close(); b.focus(); };
+  const choose = v => { if (s.value !== v) { s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); } close(); b.focus(); };
   act(i);
   p.onclick = e => { const o = e.target.closest('.copt'); if (o) { e.stopPropagation(); choose(o.dataset.v); } };
   p.onmousemove = e => { const o = e.target.closest('.copt'); if (o) act(items.indexOf(o)); };
