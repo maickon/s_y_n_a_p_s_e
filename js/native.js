@@ -7,3 +7,4 @@ export const info = isDesktop ? call('info').catch(() => null) : Promise.resolve
 let onDl;
 export const onDownload = f => { onDl = f; };
 if (isDesktop) T.event.listen('native-dl', e => onDl?.(e.payload));
+export const listen = (ev, f) => isDesktop ? T.event.listen(ev, e => f(e.payload)) : Promise.resolve(() => { });

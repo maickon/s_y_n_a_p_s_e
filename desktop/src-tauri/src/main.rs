@@ -2,6 +2,7 @@
 mod dl;
 mod ffmpeg;
 mod kv;
+mod neural;
 mod piper;
 mod whisper;
 use std::sync::Arc;
@@ -21,7 +22,7 @@ fn info() -> serde_json::Value {
         "arch": std::env::consts::ARCH,
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
         "version": env!("CARGO_PKG_VERSION"),
-        "features": ["piper", "ffmpeg", "whisper", "kv"]
+        "features": ["piper", "ffmpeg", "whisper", "kv", "neural"]
     })
 }
 
@@ -31,6 +32,16 @@ async fn piper_tts(app: AppHandle, st: State<'_, Arc<piper::Piper>>, text: Strin
     let p = st.inner().clone();
     blocking(move || p.say(&app, &text, &voice, speed).map(Response::new)).await
 }
+
+// vozes neurais (Python): corpo = WAV de referência (clonagem) ou vazio
+#[tauri::command]
+async fn neural_tts(app: AppHandle, st: State<'_, Arc<neural::Neural>>, req: Request<'_>) -> R<Response> {
+    let (n, b) = (st.inner().clone(), raw(&req)?.to_vec());
+    let (e, v, t, sp) = (hdr(&req, "engine"), hdr(&req, "voice"), dec(&hdr(&req, "text")), hdr(&req, "speed").parse().unwrap_or(1.0));
+    blocking(move || n.say(&app, &e, &v, &t, sp, &b).map(Response::new)).await
+}
+#[tauri::command]
+async fn neural_setup(app: AppHandle, st: State<'_, Arc<neural::Neural>>, engine: String) -> R<()> { let n = st.inner().clone(); blocking(move || n.setup(&app, &engine)).await }
 
 // Whisper nativo: corpo = PCM f32 mono 16 kHz
 #[tauri::command]
@@ -82,7 +93,8 @@ fn main() {
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc])
+        .manage(Arc::new(neural::Neural::default()))
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }

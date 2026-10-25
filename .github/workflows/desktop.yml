@@ -32,6 +32,13 @@ jobs:
         with: { workspaces: desktop/src-tauri }
       - run: npm ci
         working-directory: desktop
+      - name: Compilar (erros viram anotações)
+        shell: bash
+        working-directory: desktop
+        run: |
+          npm run copy
+          cargo build --release --manifest-path src-tauri/Cargo.toml 2>&1 | tee b.log; s=${PIPESTATUS[0]}
+          [ $s -eq 0 ] || { grep -E "error|Error|failed|fatal" b.log | tail -25 | sed 's/^/::error::/'; exit $s; }
       - uses: tauri-apps/tauri-action@v0
         env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         with:

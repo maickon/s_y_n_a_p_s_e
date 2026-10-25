@@ -1,7 +1,7 @@
 import { splitScenes, hash } from './core/script.js';
 import { buildVoiceTrack } from './core/voicetrack.js';
 import { EFFECTS, applyFx } from './audio/fx.js';
-import { VOICES, synth } from './tts/index.js';
+import { VOICES, synth, neural, setRef } from './tts/index.js';
 import { audition, gallery, stop as stopAud, hooks as audHooks } from './ui/audition.js';
 import { PROFILES, previewMusic, previewAmb, previewPack, previewSting, clip } from './audio/preview.js';
 import { toWav } from './audio/wav.js';
@@ -36,7 +36,7 @@ import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.
 import { warn, ask, progress, modal } from './ui/modal.js';
 import * as store from './core/store.js';
 import * as projects from './core/projects.js';
-import { isDesktop, info as nativeInfo, call as native } from './native.js';
+import { isDesktop, info as nativeInfo, call as native, listen } from './native.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -788,6 +788,29 @@ await store.bindForm(() => {
 await applyAspect();
 galleries(); enhance(); tooltips();
 if (isDesktop) nativeInfo.then(i => { document.querySelector('h1')?.insertAdjacentHTML('afterend', `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300" title="${i ? i.os + ' · ' + i.cpus + ' núcleos' : ''}">DESKTOP</span>`); });
+// vozes neurais (desktop): instala o motor Python na 1ª vez, com confirmação e progresso
+neural.install = async engine => {
+  const xt = engine === 'xtts', ok = await modal({ title: xt ? 'Instalar XTTS (clonagem de voz)' : 'Instalar vozes Kokoro pt-BR', icon: '◈',
+    msg: xt ? 'Requer Python 3.9+. Baixa ~3 GB (PyTorch + modelo). Mais lenta sem placa NVIDIA. Licença do modelo XTTS-v2 (Coqui CPML): somente uso NÃO comercial. Continuar?' : 'Requer Python 3.9+. Baixa ~450 MB. Vozes naturais em português, rápidas no processador. Continuar?',
+    buttons: [{ label: 'Cancelar', value: false }, { label: 'Instalar', value: true, primary: true }] });
+  if (!ok) return false;
+  const m = progress({ title: 'Instalando vozes neurais' }); let n = 0;
+  const off = await listen('neural-setup', l => l && m.set(Math.min(.95, ++n / 400), l.slice(0, 110)));
+  try { await native('neural_setup', { engine }); return true; } catch (e) { warn(String(e)); return false; } finally { off(); m.close(); }
+};
+// amostra da voz para clonagem (XTTS): convertida para WAV mono e cortada em 20 s
+const refBox = () => $('ref-box')?.classList.toggle('hidden', !el.voice.value.includes('xtts'));
+$('ref-file') && ($('ref-file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const b = await new AudioContext().decodeAudioData(await f.arrayBuffer()), n = Math.min(b.length, b.sampleRate * 20), c = new AudioBuffer({ length: n, sampleRate: b.sampleRate });
+    c.copyToChannel(b.getChannelData(0).slice(0, n), 0);
+    await setRef(toWav(c)); $('ref-name').textContent = `${f.name} · ${(n / b.sampleRate).toFixed(1)} s`; store.set('voiceRefName', $('ref-name').textContent);
+    el.voice.dispatchEvent(new Event('change', { bubbles: true }));
+  } catch { warn('Não consegui ler esse áudio. Use WAV ou MP3.'); }
+});
+el.voice.addEventListener('change', refBox); refBox();
+store.get('voiceRefName').then(v => v && $('ref-name') && ($('ref-name').textContent = v));
 if (!await store.get('mig-clean')) { // aplica uma vez os novos padrões (voz natural, sem ambiente)
   for (const [id, v] of [['effect-select', 'clean'], ['amb-select', 'none']]) { $(id).value = v; $(id).dispatchEvent(new Event('change', { bubbles: true })); G[id === 'amb-select' ? 'amb' : 'effect']?.select(v); }
   store.set('mig-clean', 1);

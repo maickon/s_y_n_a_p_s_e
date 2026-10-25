@@ -1,4 +1,4 @@
-import { synth } from '../tts/index.js';
+import { synth, refTag } from '../tts/index.js';
 import { applyFx, EFFECTS } from '../audio/fx.js';
 import { estimate } from './words.js';
 import * as store from './store.js';
@@ -14,7 +14,7 @@ async function trim(k) {
   while (idx.length > 600) store.del('tts:' + idx.shift());
   store.set('ttsIdx', idx);
 }
-const keyOf = (text, voice, effect, tom, speed) => hashKey([text, voice, effect, tom, speed].join('|'));
+const keyOf = (text, voice, effect, tom, speed) => hashKey([text, voice + (voice.includes('xtts') ? refTag : ''), effect, tom, speed].join('|'));
 async function sceneAudio(text, voice, effect, tom, speed, onDownload, pre) {
   const k = keyOf(text, voice, effect, tom, speed);
   if (MEM.has(k)) return { ...MEM.get(k), k };
