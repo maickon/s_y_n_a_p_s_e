@@ -16,6 +16,7 @@ import { transcribe } from './ai/whisper.js';
 import { align, groups, toSRT } from './core/words.js';
 import { createCompositor } from './render/compositor.js';
 import { exportMP4 } from './export/mp4.js';
+import { exportNative } from './export/ffmpeg.js';
 import { exportHyperFrames } from './export/hyperframes.js';
 import { direct, INTRO } from './core/direct.js';
 import { LAYOUT_NAMES, TRANS_NAMES, GRADES, GRADE_NAMES, setAspect, W as VW, H as VH } from './render/layouts.js';
@@ -35,7 +36,7 @@ import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.
 import { warn, ask, progress, modal } from './ui/modal.js';
 import * as store from './core/store.js';
 import * as projects from './core/projects.js';
-import { isDesktop, info as nativeInfo } from './native.js';
+import { isDesktop, info as nativeInfo, call as native } from './native.js';
 
 const $ = id => document.getElementById(id);
 const PRESET = `A realidade é apenas uma simulação em baixa resolução.
@@ -200,8 +201,16 @@ $('btn-mp4').onclick = async () => {
     og?.drawImage(xc, 0, 0, out.width, out.height);
   };
   try {
-    const t = Date.now(), { blob, vc, ac } = await exportMP4({ canvas: out, audio: S.mix, duration: S.mix.duration, fps, cancelled: () => m.cancelled, draw, onProgress: (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`) });
-    download(blob, `SYNAPSE_${aspect.replace(':', 'x')}_${h}p${fps}_${Date.now()}.mp4`);
+    const t = Date.now(), name = `SYNAPSE_${aspect.replace(':', 'x')}_${h}p${fps}_${Date.now()}.mp4`, onProgress = (p, i, n) => m.set(p, `Quadro ${i}/${n} · ${p * 100 | 0}%`);
+    if (isDesktop) { // FFmpeg nativo, salvo direto em Vídeos/SYNAPSE
+      m.set(0, 'Preparando FFmpeg (1º uso baixa ~80MB)...');
+      const { path, enc } = await exportNative({ canvas: out, audio: S.mix, duration: S.mix.duration, fps, cancelled: () => m.cancelled, draw, onProgress, name });
+      status(`MP4 PRONTO · ${enc.toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
+      modal({ title: 'Vídeo exportado', msg: path, icon: '✓', buttons: [{ label: 'OK', value: false }, { label: 'Abrir pasta', value: true, primary: true }] }).then(v => v && native('reveal', { path }));
+      return;
+    }
+    const { blob, vc, ac } = await exportMP4({ canvas: out, audio: S.mix, duration: S.mix.duration, fps, cancelled: () => m.cancelled, draw, onProgress });
+    download(blob, name);
     status(`MP4 PRONTO · ${vc.toUpperCase()}/${(ac || 'sem áudio').toUpperCase()} · ${((Date.now() - t) / 1e3).toFixed(1)}s`, 'bg-emerald-500');
   } catch (e) { if (e.message !== 'CANCELADO') { console.error(e); warn('Falha na exportação: ' + e.message); } else status('EXPORTAÇÃO CANCELADA', 'bg-zinc-600'); }
   finally { m.close(); xcomp.destroy(); xbg.dispose(); exporting = false; }
