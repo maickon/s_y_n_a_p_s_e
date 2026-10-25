@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "tauri": "tauri",
     "copy": "node copy.mjs",
     "dev": "tauri dev",
     "build": "tauri build",

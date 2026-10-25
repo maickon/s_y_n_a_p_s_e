@@ -1,6 +1,7 @@
 import { CDN } from '../cdn.js';
 import { speak as espeak } from './mespeak.js';
 import { decode, fromPCM } from '../audio/util.js';
+import { isDesktop, call, onDownload } from '../native.js';
 
 // catálogo de vozes por motor
 const ES = { m1: 'Masculina 1', m2: 'Masculina 2', m3: 'Masculina 3', m4: 'Masculina 4', m5: 'Masculina 5', m6: 'Masculina 6', m7: 'Masculina 7', f1: 'Feminina 1', f2: 'Feminina 2', f3: 'Feminina 3', f4: 'Feminina 4', f5: 'Feminina 5', klatt3: 'Klatt (sintética)', croak: 'Rouca', whisper: 'Sussurro', '': 'Padrão' };
@@ -11,10 +12,12 @@ export const VOICES = {
   'Kokoro (IA ~90MB · somente inglês)': Object.fromEntries(Object.entries(KO).map(([k, v]) => ['kokoro:' + k, v]))
 };
 
-let piper, kokoro;
+let piper, kokoro, noNative = false;
 const engines = {
   async espeak(text, v, speed) { return { buf: await espeak(text, { variant: v, pitch: 45, speed: Math.round(165 * speed) }), native: true }; },
   async piper(text, v, speed, prog) {
+    if (isDesktop && !noNative) try { onDownload(prog); return { buf: await decode(await call('piper_tts', { text, voice: v, speed })), native: true }; } // nativo: rápido e velocidade sem distorção
+    catch (e) { console.warn('Piper nativo falhou, usando o do navegador', e); noNative = true; }
     const tts = await (piper ??= import(CDN.piper).catch(e => { piper = null; throw e; }));
     return { buf: await decode(await (await tts.predict({ text, voiceId: v }, prog)).arrayBuffer()) };
   },

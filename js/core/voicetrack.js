@@ -3,6 +3,9 @@ import { applyFx, EFFECTS } from '../audio/fx.js';
 import { estimate } from './words.js';
 import * as store from './store.js';
 import { hashKey, pack, unpack } from '../audio/bufstore.js';
+import { isDesktop } from '../native.js';
+
+const AHEAD = isDesktop ? 4 : 1; // desktop: várias frases em paralelo (pool nativo)
 
 // cache por frase (memória + IndexedDB): só frases novas/alteradas são sintetizadas
 const MEM = new Map();
@@ -36,7 +39,7 @@ export async function buildVoiceTrack(scenes, { voice, effect, tom = 0, speed = 
   };
   for (const [i, s] of scenes.entries()) {
     onProgress?.(i, scenes.length);
-    kick(i); kick(i + 1);
+    for (let j = 0; j <= AHEAD; j++) kick(i + j);
     const r = await sceneAudio(s, voice, effect, tom, speed, onDownload, await pre.get(i));
     fallback ||= r.fallback;
     bufs.push(r);
