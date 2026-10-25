@@ -37,17 +37,17 @@ async function stem(key, dur, build, onP, { tail = 0, keep = false } = {}) {
 export function mixKey(o) {
   const ST = STYLES[o.style] || STYLES[0];
   return hashKey(JSON.stringify([o.voiceKey, o.duration.toFixed(2), o.segs.map(s => [s.a.toFixed(2), s.trans, s.seed]), o.timeline.map(s => [s.start.toFixed(2), s.end.toFixed(2)]),
-    o.style, o.seed, o.musicName || '', o.amb === 'auto' ? ST.amb : o.amb, o.pack === 'auto' ? ST.sfx : o.pack, o.prof === 'auto' ? ST.mus : o.prof, o.intro, o.vol]));
+    o.style, o.seed, o.musicName || '', o.amb === 'auto' ? ST.amb : o.amb, o.pack === 'auto' ? ST.sfx : o.pack, o.prof === 'auto' ? ST.mus : o.prof, o.intro, o.vol, o.extra]));
 }
 
-export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', intro, prof = 'auto', norm = true }, onP) {
+export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', intro, prof = 'auto', extra = [], norm = true }, onP) {
   const ST = STYLES[style] || STYLES[0], D = duration + 1.5;
   const p = prof === 'auto' ? ST.mus : +prof, kind = amb === 'auto' ? ST.amb : amb, pk = pack === 'auto' ? ST.sfx : pack;
   // música e ambiente: loops renderizados uma vez (independem da duração do vídeo)
   const ML = loopLen(p), mus = musicBuf || await stem(`m|${p}|${seed}`, ML, (c, o) => music(c, o, ML, p, seed), x => onP?.('Compondo música (loop)', x), { tail: 2.5, keep: true });
   const amB = kind === 'none' ? null : await stem(`a|${kind}|${seed}`, 16, (c, o) => ambience(c, o, 16, kind, seed), x => onP?.('Gerando ambiente (loop)', x), { tail: 1.5, keep: true });
   onP?.('Efeitos sonoros', null);
-  const fx = await renderEvents([...sfxEvents(segs, timeline, pk, seed), ...(intro?.sound && intro.sound !== 'none' ? stingEvents(intro.sound, intro.dur) : [])], D);
+  const fx = await renderEvents([...extra, ...sfxEvents(segs, timeline, pk, seed), ...(intro?.sound && intro.sound !== 'none' ? stingEvents(intro.sound, intro.dur) : [])], D);
   return mixJS({ voice, mus, amB, fx, D, timeline, intro, vol, norm }, onP);
 }
 

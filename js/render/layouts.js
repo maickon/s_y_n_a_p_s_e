@@ -197,12 +197,14 @@ export const LAYOUT_NAMES = Object.keys(LW), TRANS_NAMES = Object.keys(TW), GRAD
 const pick = (r, w) => { let x = r() * Object.values(w).reduce((a, b) => a + b); for (const [k, v] of Object.entries(w)) if ((x -= v) < 0) return k; return Object.keys(w)[0]; };
 
 // escolhe layout/transição/tratamento sem repetir o anterior
-export function prepare(segs, { grades = ['none'], grade = 'auto' } = {}) {
+export function prepare(segs, { grades = ['none'], grade = 'auto', lw = {}, tw = {} } = {}) {
+  // pesos do tipo de vídeo somados aos padrões
+  const LWx = { ...LW }, TWx = { ...TW }; for (const k in lw) LWx[k] = (LWx[k] || 0) + lw[k]; for (const k in tw) TWx[k] = (TWx[k] || 0) + tw[k];
   segs.forEach((s, i) => {
     const r = rng(s.seed + 1), pv = segs[i - 1];
-    let L = pick(r, LW), t = pick(r, TW);
-    if (pv && L === pv.layout) L = pick(r, { ...LW, [L]: 0 });
-    if (pv && t === pv.trans) t = pick(r, { ...TW, [t]: 0 });
+    let L = pick(r, LWx), t = pick(r, TWx);
+    if (pv && L === pv.layout) L = pick(r, { ...LWx, [L]: 0 });
+    if (pv && t === pv.trans) t = pick(r, { ...TWx, [t]: 0 });
     const gr = grades[r() * grades.length | 0];
     Object.assign(s, { layout: s.layout || L, trans: s.trans || t, grade: s.grade || (grade === 'auto' ? gr : grade), r: { zin: r() > .5, dx: r() > .5 ? 1 : -1, dy: r() > .5 ? 1 : -1, rot: r() > .5 ? 1 : -1, side: r() > .5 } });
   });

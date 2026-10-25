@@ -3,6 +3,7 @@ import { RGBSplitFilter, GlitchFilter, CRTFilter } from 'pixi-filters';
 import { build, prepare, W, H, T, cl, ease } from './layouts.js';
 import { STYLES } from '../core/styles.js';
 import { drawCaptions, drawWatermark } from './captions.js';
+import { drawCards } from './cards.js';
 import { drawIntro, drawOutro, drawKinetic } from './titles.js';
 
 const K = 1.5; // render interno 1920x1080
@@ -44,7 +45,8 @@ export async function createCompositor(canvas, bgCanvas) {
       const cs = segs.find(s => t >= s.a && t < s.b)?.credit;
       if (segs.some(s => t >= s.a && t < s.b + T)) { const gr = g.createLinearGradient(0, H * .55, 0, H); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = gr; g.fillRect(0, H * .55, W, H * .45); }
       if (cs) { g.font = '13px "Fira Code", monospace'; g.fillStyle = 'rgba(255,255,255,.5)'; const L = tx.wm?.type !== 'none' && tx.wm?.pos === 'br'; g.textAlign = L ? 'left' : 'right'; g.fillText(cs.slice(0, 80), L ? 18 : W - 18, H - 12); }
-      if (tx.cap) { drawKinetic(g, t, dir.kin, segs, tx); drawCaptions(g, caps, t, W, H, tx); }
+      const full = drawCards(g, t, dir.vt, timeline, tx);
+      if (tx.cap && !full) { drawKinetic(g, t, dir.kin, segs, tx); drawCaptions(g, caps, t, W, H, tx); }
       drawIntro(g, t, dir.intro, tx); drawOutro(g, t, dir.outro, tx); drawWatermark(g, W, H, tx.wm);
       capT.source.update();
       app.renderer.render(app.stage);

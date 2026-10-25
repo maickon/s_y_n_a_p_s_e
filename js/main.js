@@ -27,7 +27,8 @@ import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, a
 import { PROVIDERS, setConfig, active as activeSrc } from './media/search.js';
 import { loadImage } from './media/loader.js';
 import { SOURCES as TSRC, EXTERNAL as TEXT, trends } from './media/trends.js';
-import { scriptFromTopic } from './core/scriptgen.js';
+import { scriptFromTopic, sentences } from './core/scriptgen.js';
+import { TYPES, PRESETS, parseScene, formatScript, cardEvents } from './core/vtypes.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
@@ -96,13 +97,13 @@ async function render() {
   if (Math.abs(track.lead - ic.dur) > .01) shiftTrack(ic.dur);
   dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(),
     credits: ['Voz: ' + el.voice.selectedOptions[0].text + ' · ' + el.voice.value.split(':')[0], 'Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')],
-    intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
+    vt: { type: $('vtype').value, cards }, intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
   readText();
   comp.load(segsCur = dir.segs);
   if (!pl.playing) drawAt(pl.time); // o visual atualiza na hora; o áudio entra quando a mixagem terminar
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   const mo = { voice: track.buffer, voiceKey: track.key, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(curId) + variation,
-    musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
+    musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, extra: cardEvents(cards, track.timeline), intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
   // mixagem salva por projeto: se nada mudou, carrega na hora
   const mk = mixKey(mo), saved = mixMem?.key === mk ? mixMem : await store.get('mix:' + curId);
   if (saved?.key === mk && (saved.buf || saved.blob)) { prog('Carregando mixagem salva', null); mix = saved.buf || await unpackBuf(saved); }
@@ -121,14 +122,15 @@ async function render() {
   saveWS();
 }
 
-let pendingGen = false, restored = null, dirty = false, mixMem = null;
+let pendingGen = false, restored = null, dirty = false, mixMem = null, cards = [];
 $('btn-manifest').onclick = () => generate();
 function generate() {
   if (busy) return pendingGen = true;
-  const scenes = splitScenes(el.txt.value);
-  if (!scenes.length) return warn('Digite um roteiro válido.');
+  const raw = splitScenes(el.txt.value), type = $('vtype').value;
+  if (!raw.length) return warn('Digite um roteiro válido.');
+  const parsed = raw.map((x, i) => parseScene(x, type, i, raw));
   run(async () => {
-    track = await makeTrack(scenes);
+    track = await makeTrack(parsed.map(p => p.say)); cards = parsed.map(p => p.card);
     if ($('ai-sync').checked) try {
       status('WHISPER: CARREGANDO...', 'bg-yellow-400 animate-pulse');
       const ak = 'asr:' + track.key, asr = await store.get(ak) || await transcribe(track.dry, e => e.status === 'progress' && e.file?.endsWith('.onnx') && status('WHISPER: BAIXANDO MODELO', 'bg-yellow-400 animate-pulse', e.progress / 100));
@@ -294,7 +296,7 @@ document.addEventListener('keydown', e => {
 });
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
-window.synapse = { assets, get range() { return pl.range; }, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
+window.synapse = { assets, get timeline() { return track?.timeline; }, get range() { return pl.range; }, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
@@ -633,6 +635,23 @@ $('src-cfg').addEventListener('change', e => {
 });
 srcUI();
 
+// --- Tipos de vídeo ---
+$('vtype').innerHTML = Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.n}</option>`).join('');
+const typeUI = () => { const t = $('vtype').value; $('vtype-d').textContent = TYPES[t].d + (t === 'doc' ? '' : ' · use os marcadores ao lado ou "Reformatar roteiro"'); $('vtype-n-w').classList.toggle('hidden', t !== 'top'); };
+function applyPreset() {
+  const P = PRESETS[$('vtype').value]; if (!P || !$('vtype-auto').checked) return;
+  const set = (id, v) => { if (v == null) return; $(id).value = v; $(id).dispatchEvent(new Event('change', { bubbles: true })); };
+  set('style-select', el.style.options[P.style].value); set('cap-style', P.cap); set('music-prof', P.prof); set('sfx-pack', P.sfx); set('amb-select', P.amb); if (P.grade) set('grade-select', P.grade);
+  G.prof?.select(P.prof); G.sfx?.select(P.sfx); G.amb?.select(P.amb); readText();
+}
+$('vtype').addEventListener('change', () => { typeUI(); applyPreset(); if (track) { lastGen = el.txt.value; generate(); } });
+$('vtype-fmt').onclick = () => {
+  const t = $('vtype').value, ss = sentences(el.txt.value.replace(/^(#\s*\d+.*|passo\s*\d+\s*:\s*|\d{1,4}(\s*a\.C\.)?\s*\|\s*|urgente\s*:\s*|você sabia que\s*)/gim, ''));
+  el.txt.value = formatScript(t, ss.length ? ss : splitScenes(el.txt.value), { n: +$('vtype-n').value || 5, title: $('video-title').value.trim() });
+  el.txt.dispatchEvent(new Event('input')); count(); lastGen = el.txt.value; generate();
+};
+typeUI();
+
 // --- Ideias & Tendências: listas em alta + roteiro automático a partir da Wikipedia ---
 let trSrc = 'wiki', trCfg = await store.get('trendcfg') || {};
 $('yt-key').value = trCfg.ytKey || '';
@@ -666,6 +685,7 @@ async function makeFrom(item) {
   let r;
   try { r = await scriptFromTopic(topic, { lang: item.lang || $('tr-lang').value, size: +$('tr-size').value }); }
   catch { r = { title: item.title || topic, text: [item.title, item.desc].filter(Boolean).join('. ').slice(0, 600) || topic }; }
+  if ($('vtype').value !== 'doc') r.text = formatScript($('vtype').value, r.text.split('\n').filter(Boolean), { n: +$('vtype-n').value || 5, title: r.title });
   progDone(0);
   const pr = modal({ title: 'Criar vídeo', html: `<label class="fl">Título<input id="mk-title" class="inp !p-2" value="${escH(r.title)}"></label>
     <label class="fl">Roteiro (edite à vontade)<textarea id="mk-text" class="inp h-56 text-[12px] leading-relaxed">${escH(r.text)}</textarea></label>${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" class="text-[10px] text-emerald-400">Fonte: Wikipedia ↗</a>` : ''}`,
@@ -742,7 +762,7 @@ $('btn-projects').onclick = manager;
 const addFile = (f, id) => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file', id }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => { store.set('imgs', assets.filter(a => a.blob).map(a => ({ id: a.id, blob: a.blob }))); dirty = true; };
 await store.bindForm(() => {
-  vigUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+  vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
 await setWm(await store.get('wm')).catch(() => { });
