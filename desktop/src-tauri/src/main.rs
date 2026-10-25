@@ -85,6 +85,13 @@ fn dec(s: &str) -> String { // decodeURIComponent
     String::from_utf8_lossy(&o).into()
 }
 
+// GET de texto sem CORS (notícias/RSS); só https
+#[tauri::command]
+async fn http_get(url: String) -> R<String> {
+    if !url.starts_with("https://") { return Err("só https".into()); }
+    blocking(move || ureq::AgentBuilder::new().try_proxy_from_env(true).timeout(std::time::Duration::from_secs(15)).build().get(&url).set("User-Agent", "Mozilla/5.0 SYNAPSE").call().map_err(|e| e.to_string())?.into_string().map_err(|e| e.to_string())).await
+}
+
 #[tauri::command]
 fn reveal(path: String) { ffmpeg::reveal(&path) }
 
@@ -94,7 +101,7 @@ fn main() {
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
         .manage(Arc::new(neural::Neural::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup])
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }

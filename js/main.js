@@ -52,7 +52,7 @@ const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
 let ctx, rec, track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 // status no topo + painel flutuante (etapas em andamento)
-const status = (t, c = 'bg-zinc-600', p) => { $('status-text').textContent = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; if (!/animate-pulse/.test(c)) return progDone();
+const status = (t, c = 'bg-zinc-600', p) => { $('status-text').textContent = $('status-text').title = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; if (!/animate-pulse/.test(c)) return progDone();
   const m = t.match(/ (\d+)\/(\d+)$/), L = t.replace(/ \d+\/\d+$/, '').replace(/\.\.\.$/, '');
   prog(L.charAt(0) + L.slice(1).toLowerCase(), p ?? (m ? (m[1] - 1) / m[2] : null), m ? `${m[1]} de ${m[2]}` : '');
 };
