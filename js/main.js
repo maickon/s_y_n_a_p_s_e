@@ -26,6 +26,8 @@ import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
 import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS } from './core/assets.js';
 import { PROVIDERS, setConfig, active as activeSrc } from './media/search.js';
 import { loadImage } from './media/loader.js';
+import { SOURCES as TSRC, EXTERNAL as TEXT, trends } from './media/trends.js';
+import { scriptFromTopic } from './core/scriptgen.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
@@ -630,6 +632,57 @@ $('src-cfg').addEventListener('change', e => {
   setConfig(imgCfg); store.set('imgcfg', imgCfg); srcUI(); Object.keys(CANDS).forEach(k => delete CANDS[k]);
 });
 srcUI();
+
+// --- Ideias & Tendências: listas em alta + roteiro automático a partir da Wikipedia ---
+let trSrc = 'wiki', trCfg = await store.get('trendcfg') || {};
+$('yt-key').value = trCfg.ytKey || '';
+$('yt-key').onchange = e => { trCfg.ytKey = e.target.value.trim(); store.set('trendcfg', trCfg); loadTrends(); };
+$('tr-src').innerHTML = Object.entries(TSRC).map(([k, v]) => `<button data-s="${k}" class="px-2 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-purple-600 text-[11px] flex items-center gap-1.5"><i data-lucide="${v.icon}" class="w-3.5 h-3.5"></i>${v.n}</button>`).join('');
+$('tr-ext').innerHTML = TEXT.map(([n, u]) => `<a href="${u}" target="_blank" rel="noopener" class="px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-[11px] flex items-center gap-1">${n} <i data-lucide="external-link" class="w-3 h-3"></i></a>`).join('');
+async function loadTrends() {
+  document.querySelectorAll('#tr-src [data-s]').forEach(b => b.classList.toggle('!border-emerald-500', b.dataset.s === trSrc));
+  $('tr-key').classList.toggle('hidden', trSrc !== 'yt'); $('tr-key').classList.toggle('flex', trSrc === 'yt');
+  const L = $('tr-list'); L.innerHTML = '<span class="text-zinc-500">Carregando...</span>';
+  try {
+    const f = $('tr-q').value.trim().toLowerCase();
+    let l = await trends(trSrc, { lang: $('tr-lang').value, q: f, ytKey: trCfg.ytKey });
+    if (f && trSrc !== 'news') l = l.filter(x => x.title.toLowerCase().includes(f));
+    L.innerHTML = l.length ? l.map((x, k) => `<div class="flex gap-2 items-start bg-zinc-900/70 rounded-lg p-2 border border-zinc-800">
+      ${x.thumb ? `<img src="${x.thumb}" class="w-14 h-9 object-cover rounded flex-none">` : `<span class="w-6 text-center text-purple-400 font-bold">${k + 1}</span>`}
+      <div class="flex-1 min-w-0"><b class="block text-zinc-200 text-[11px] leading-snug">${escH(x.title)}</b><span class="text-[10px] text-zinc-500">${escH(x.sub)}</span>
+        <div class="flex gap-1.5 mt-1"><button data-make="${k}" class="px-2 py-0.5 rounded bg-purple-700 hover:bg-purple-600 text-white text-[10px] font-bold">CRIAR VÍDEO</button><a href="${x.url}" target="_blank" rel="noopener" class="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-[10px]">abrir ↗</a></div></div></div>`).join('') : '<span class="text-zinc-500">Nada encontrado.</span>';
+    L.querySelectorAll('[data-make]').forEach(b => b.onclick = () => makeFrom(l[b.dataset.make]));
+  } catch (e) { L.innerHTML = `<span class="text-red-400">${escH(e.message || String(e))}</span>`; }
+}
+$('tr-src').onclick = e => { const b = e.target.closest('[data-s]'); if (b) { trSrc = b.dataset.s; loadTrends(); } };
+$('tr-go').onclick = loadTrends; $('tr-q').onkeydown = e => e.key === 'Enter' && loadTrends(); $('tr-lang').addEventListener('change', loadTrends);
+let trLoaded = false;
+document.querySelector('[data-tab=ideas]').addEventListener('click', () => trLoaded || (trLoaded = true, loadTrends()));
+if ((await store.get('tab')) === 'ideas') { trLoaded = true; loadTrends(); }
+// cria o roteiro (Wikipedia) e oferece novo projeto ou substituir o atual
+async function makeFrom(item) {
+  const topic = typeof item === 'string' ? item : item.wiki || item.title;
+  prog('Montando roteiro a partir da Wikipedia', null);
+  let r;
+  try { r = await scriptFromTopic(topic, { lang: item.lang || $('tr-lang').value, size: +$('tr-size').value }); }
+  catch { r = { title: item.title || topic, text: [item.title, item.desc].filter(Boolean).join('. ').slice(0, 600) || topic }; }
+  progDone(0);
+  const pr = modal({ title: 'Criar vídeo', html: `<label class="fl">Título<input id="mk-title" class="inp !p-2" value="${escH(r.title)}"></label>
+    <label class="fl">Roteiro (edite à vontade)<textarea id="mk-text" class="inp h-56 text-[12px] leading-relaxed">${escH(r.text)}</textarea></label>${r.url ? `<a href="${r.url}" target="_blank" rel="noopener" class="text-[10px] text-emerald-400">Fonte: Wikipedia ↗</a>` : ''}`,
+    buttons: [{ label: 'Cancelar', value: null }, { label: 'Usar neste projeto', value: 'here' }, { label: 'Criar novo projeto', value: 'new', primary: true }] });
+  const box = [...document.querySelectorAll('.z-\\[100\\]')].pop(); box.querySelector('.max-w-md')?.classList.replace('max-w-md', 'max-w-2xl');
+  let T = r.title, X = r.text;
+  document.getElementById('mk-title').oninput = e => T = e.target.value; document.getElementById('mk-text').oninput = e => X = e.target.value;
+  const v = await pr;
+  if (v === 'new') { await flushProj(); return projects.create({ 'script-input': X, 'video-title': T }); }
+  if (v === 'here') { el.txt.value = X; $('video-title').value = T; el.txt.dispatchEvent(new Event('input')); $('video-title').dispatchEvent(new Event('input')); count(); showTab('script'); lastGen = X; generate(); }
+}
+$('tr-own').onclick = async () => {
+  const pr = modal({ title: 'Criar vídeo sobre um tema', html: '<input id="own-q" class="inp !p-2" placeholder="Ex.: Pirâmides do Egito">', buttons: [{ label: 'Cancelar', value: null }, { label: 'Montar roteiro', value: 1, primary: true }] });
+  const inp = document.getElementById('own-q'); let q = ''; inp.oninput = e => q = e.target.value; inp.focus();
+  inp.onkeydown = e => e.key === 'Enter' && inp.closest('.z-\\[100\\]').querySelector('.bg-purple-700').click();
+  if (await pr && q.trim()) makeFrom(q.trim());
+};
 
 // --- Projetos: autosave do espaço de trabalho + gerenciador ---
 let curId = await store.get('curProject');
