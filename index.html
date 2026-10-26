@@ -38,7 +38,7 @@
   </div>
 </header>
 <div class="flex-1 min-h-0 flex">
-  <nav class="w-16 shrink-0 flex flex-col items-center gap-1 py-2 border-r border-zinc-900 bg-black/50 overflow-y-auto"><button data-tab="ideas" class="tab"><i data-lucide="lightbulb" class="w-5 h-5"></i><span>Ideias</span></button><button data-tab="script" class="tab"><i data-lucide="file-text" class="w-5 h-5"></i><span>Roteiro</span></button><button data-tab="voice" class="tab"><i data-lucide="mic" class="w-5 h-5"></i><span>Voz</span></button><button data-tab="media" class="tab"><i data-lucide="image" class="w-5 h-5"></i><span>Mídia</span></button><button data-tab="audio" class="tab"><i data-lucide="music" class="w-5 h-5"></i><span>Áudio</span></button><button data-tab="text" class="tab"><i data-lucide="type" class="w-5 h-5"></i><span>Texto</span></button><button data-tab="style" class="tab"><i data-lucide="palette" class="w-5 h-5"></i><span>Estilo</span></button><button data-tab="intro" class="tab"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Abertura</span></button><button data-tab="outro" class="tab"><i data-lucide="list-end" class="w-5 h-5"></i><span>Final</span></button><button data-tab="brand" class="tab"><i data-lucide="stamp" class="w-5 h-5"></i><span>Marca</span></button></nav>
+  <nav class="w-16 shrink-0 flex flex-col items-center gap-1 py-2 border-r border-zinc-900 bg-black/50 overflow-y-auto"><button data-tab="ideas" class="tab"><i data-lucide="lightbulb" class="w-5 h-5"></i><span>Ideias</span></button><button data-tab="script" class="tab"><i data-lucide="file-text" class="w-5 h-5"></i><span>Roteiro</span></button><button data-tab="voice" class="tab"><i data-lucide="mic" class="w-5 h-5"></i><span>Voz</span></button><button data-tab="media" class="tab"><i data-lucide="image" class="w-5 h-5"></i><span>Mídia</span></button><button data-tab="audio" class="tab"><i data-lucide="music" class="w-5 h-5"></i><span>Áudio</span></button><button data-tab="text" class="tab"><i data-lucide="type" class="w-5 h-5"></i><span>Texto</span></button><button data-tab="style" class="tab"><i data-lucide="palette" class="w-5 h-5"></i><span>Estilo</span></button><button data-tab="intro" class="tab"><i data-lucide="sparkles" class="w-5 h-5"></i><span>Abertura</span></button><button data-tab="outro" class="tab"><i data-lucide="list-end" class="w-5 h-5"></i><span>Final</span></button><button data-tab="brand" class="tab"><i data-lucide="stamp" class="w-5 h-5"></i><span>Marca</span></button><button data-tab="sys" class="tab mt-auto"><i data-lucide="settings" class="w-5 h-5"></i><span>Sistema</span></button></nav>
   <aside id="text-panel" class="w-80 shrink-0 border-r border-zinc-900 bg-zinc-950/80 p-4 overflow-y-auto text-zinc-400">
       <section data-pane="ideas" class="pane hidden flex-col gap-3">
         <h2 class="pane-h"><i data-lucide="lightbulb" class="w-4 h-4"></i> Ideias & Tendências</h2>
@@ -170,6 +170,21 @@
           <label>Opacidade <span id="wm-op-v" class="float-right text-purple-400">60%</span><input type="range" id="wm-op" data-persist min="10" max="100" value="60" class="w-full accent-purple-500"></label>
         </div>
 
+      </section>
+      <section data-pane="sys" class="pane hidden flex-col gap-3">
+        <h2 class="pane-h"><i data-lucide="settings" class="w-4 h-4"></i> Sistema</h2>
+        <div id="sys-info" class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-[11px] leading-relaxed text-zinc-400"></div>
+        <div id="sys-upd" class="hidden flex-col gap-2">
+          <h3 class="text-[10px] uppercase tracking-wider text-purple-300">Atualizações</h3>
+          <button id="upd-check" class="btn bg-emerald-700 hover:bg-emerald-600 text-white"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Procurar atualização</button>
+          <label class="row"><input type="checkbox" id="upd-auto"> Verificar ao abrir o app</label>
+          <label class="row"><input type="checkbox" id="upd-silent"> Instalar sem perguntar</label>
+          <span id="upd-last" class="text-[10px] text-zinc-500"></span>
+        </div>
+        <h3 class="text-[10px] uppercase tracking-wider text-purple-300 mt-2">Diagnóstico do teclado</h3>
+        <input id="kb-test" type="text" class="inp !p-2 text-[11px]" placeholder="Clique aqui e digite algo">
+        <pre id="kb-log" class="h-28 overflow-auto rounded bg-black/60 border border-zinc-800 p-2 text-[10px] text-zinc-400 whitespace-pre-wrap">Eventos aparecem aqui.</pre>
+        <button id="kb-copy" class="btn bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="clipboard" class="w-4 h-4"></i> Copiar diagnóstico</button>
       </section>
   </aside>
   <main class="flex-1 min-w-0 flex flex-col">

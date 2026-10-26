@@ -107,17 +107,23 @@ async fn update_install(app: AppHandle) -> R<()> {
     app.restart()
 }
 
+// garante o foco de teclado no webview (WebView2/WKWebView) ao entrar num campo de texto
+#[tauri::command]
+fn focus_webview(webview: tauri::Webview) { let _ = webview.set_focus(); }
+
 #[tauri::command]
 fn reveal(path: String) { ffmpeg::reveal(&path) }
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Windows/WebView2: ao a janela ganhar foco, devolve o teclado ao webview (senão os campos não recebem digitação)
+        .on_window_event(|w, e| if let tauri::WindowEvent::Focused(true) = e { for v in w.webviews() { let _ = v.set_focus(); } })
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
         .manage(Arc::new(neural::Neural::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get, update_check, update_install])
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get, update_check, update_install, focus_webview])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }

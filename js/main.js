@@ -787,21 +787,41 @@ await store.bindForm(() => {
   vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
-// desktop: selo (clique = procurar atualização) + verificação automática ao abrir
+// desktop: selo + área Sistema (versão, atualizações, diagnóstico de teclado)
+const pref = async (k, d) => (await store.get(k)) ?? d;
 async function checkUpdate(manual) {
-  let u; try { u = await native('update_check'); } catch (e) { return manual && warn(/release JSON|404/.test(e) ? 'Ainda não há uma versão com atualização automática publicada. Assim que a próxima for publicada, o app avisa aqui.' : 'Não foi possível verificar atualizações: ' + e); }
+  let u; try { u = await native('update_check'); store.set('upd-last', Date.now()); } catch (e) { return manual && warn(/release JSON|404/.test(e) ? 'Ainda não há uma versão com atualização automática publicada. Assim que a próxima for publicada, o app avisa aqui.' : 'Não foi possível verificar atualizações: ' + e); }
+  showUpd();
   if (!u) return manual && modal({ title: 'Atualizado', icon: '✓', msg: 'Você já está na versão mais recente.' });
-  if (!await modal({ title: `Nova versão ${u.version} disponível`, icon: '⬆', msg: `Versão atual: ${u.current}.${u.notes ? '\n\n' + u.notes.slice(0, 600) : ''}\n\nO app baixa a atualização e reinicia sozinho (seus projetos ficam salvos).`,
+  if (!(await pref('upd-silent', false) && !manual) && !await modal({ title: `Nova versão ${u.version} disponível`, icon: '⬆', msg: `Versão atual: ${u.current}.${u.notes ? '\n\n' + u.notes.slice(0, 600) : ''}\n\nO app baixa a atualização e reinicia sozinho (seus projetos ficam salvos).`,
     buttons: [{ label: 'Depois', value: false }, { label: 'Atualizar agora', value: true, primary: true }] })) return;
   await flushProj().catch(() => { });
   const m = progress({ title: `Baixando a versão ${u.version}` }), off = await listen('update-dl', d => d.total && m.set(d.loaded / d.total, `${(d.loaded / 1048576).toFixed(1)} / ${(d.total / 1048576).toFixed(1)} MB`));
   try { await native('update_install'); } catch (e) { warn('Falha na atualização: ' + e); } finally { off(); m.close(); }
 }
-if (isDesktop) nativeInfo.then(i => {
-  document.querySelector('h1')?.insertAdjacentHTML('afterend', `<button id="btn-upd" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 shrink-0" title="v${i?.version || '?'} · ${i ? i.os + ' · ' + i.cpus + ' núcleos' : ''} · clique para procurar atualização">DESKTOP v${i?.version || ''}</button>`);
-  $('btn-upd').onclick = () => checkUpdate(true);
-  setTimeout(() => checkUpdate(false), 8e3);
+const showUpd = async () => { const t = await store.get('upd-last'); $('upd-last').textContent = t ? `Última verificação: ${new Date(t).toLocaleString('pt-BR')}` : ''; };
+nativeInfo.then(async i => {
+  $('sys-info').innerHTML = isDesktop ? `<b class="text-zinc-200">S.Y.N.A.P.S.E Desktop v${i?.version || '?'}</b><br>${i?.os || ''} · ${i?.arch || ''} · ${i?.cpus || '?'} núcleos<br>Recursos nativos: ${(i?.features || []).join(', ')}` : '<b class="text-zinc-200">Versão web</b><br>Sempre atualizada ao recarregar a página.';
+  if (!isDesktop) return;
+  document.querySelector('h1')?.insertAdjacentHTML('afterend', `<button id="btn-upd" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 shrink-0" title="v${i?.version || '?'} · clique para procurar atualização">DESKTOP v${i?.version || ''}</button>`);
+  $('sys-upd').classList.replace('hidden', 'flex');
+  $('btn-upd').onclick = $('upd-check').onclick = () => checkUpdate(true);
+  for (const [id, d] of [['upd-auto', true], ['upd-silent', false]]) { $(id).checked = await pref(id, d); $(id).onchange = e => store.set(id, e.target.checked); }
+  showUpd();
+  if (await pref('upd-auto', true)) setTimeout(() => checkUpdate(false), 8e3);
+  // foco de teclado garantido no webview ao entrar em campos de texto
+  document.addEventListener('focusin', e => /INPUT|TEXTAREA/.test(e.target.tagName) && native('focus_webview').catch(() => { }));
 });
+// diagnóstico: mostra se as teclas chegam (keydown) e se viram texto (input)
+{
+  const L = [], log = t => { L.unshift(`${new Date().toLocaleTimeString('pt-BR')} ${t}`); L.length = 14; $('kb-log').textContent = L.filter(Boolean).join('\n'); };
+  addEventListener('keydown', e => $('kb-test') && document.activeElement === $('kb-test') && log(`keydown "${e.key}" alvo=${e.target.tagName}`), true);
+  addEventListener('keydown', e => document.activeElement === $('kb-test') && e.defaultPrevented && log(`⚠ tecla "${e.key}" bloqueada por script`));
+  $('kb-test').addEventListener('input', e => log(`input valor="${e.target.value}"`));
+  $('kb-test').addEventListener('focus', () => log('campo recebeu foco'));
+  $('kb-test').addEventListener('blur', () => log('campo perdeu foco'));
+  $('kb-copy').onclick = () => { const t = `${$('sys-info').innerText}\n${navigator.userAgent}\n---\n${L.filter(Boolean).join('\n')}`; navigator.clipboard?.writeText(t).then(() => modal({ title: 'Copiado', icon: '✓', msg: 'Cole o diagnóstico na conversa.' }), () => modal({ title: 'Diagnóstico', msg: t })); };
+}
 // vozes neurais (desktop): instala o motor Python na 1ª vez, com confirmação e progresso
 neural.install = async engine => {
   const xt = engine === 'xtts', ok = await modal({ title: xt ? 'Instalar XTTS (clonagem de voz)' : 'Instalar vozes Kokoro pt-BR', icon: '◈',
