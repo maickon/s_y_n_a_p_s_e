@@ -24,7 +24,7 @@ import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
 import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
 import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
-import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS } from './core/assets.js';
+import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS, SCENE } from './core/assets.js';
 import { PROVIDERS, setConfig, active as activeSrc } from './media/search.js';
 import { loadImage } from './media/loader.js';
 import { SOURCES as TSRC, EXTERNAL as TEXT, trends } from './media/trends.js';
@@ -144,7 +144,7 @@ function generate() {
     await syncUrls();
     const texts = track.timeline.map(s => s.text), R = restored && restored.texts?.join('\n') === texts.join('\n') ? restored : null;
     if (R) { P = R.P.map(l => l.map(id => assets.find(a => a.id === id)).filter(Boolean)); variation = R.variation || 0; ov = (R.ov || []).map(o => o && { ...o, img: o.img && assets.find(a => a.id === o.img) }); }
-    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q) });
+    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value });
     if (!R) { variation = 0; ov = []; }
     restored = null;
     await render();
@@ -161,7 +161,7 @@ async function flush() {
   const lv = pend; pend = 0;
   await run(async () => {
     if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline, capMax()); }
-    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q) }); }
+    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value }); }
     await render();
   });
 }
@@ -552,7 +552,7 @@ function editAsset(a) { imageEditor({ a }); }
 function imageEditor({ i = null, a = null }) {
   const scene = i != null, cur = scene ? sceneAsset(i) : a;
   const used = cur ? P.map((l, k) => l.includes(cur) || ov[k]?.img === cur ? k + 1 : 0).filter(Boolean) : [];
-  const term = scene ? ov[i]?.q || CANDS[i]?.q || autoQuery(track.timeline[i].text) : cur.tag || '';
+  const term = scene ? ov[i]?.q || CANDS[i]?.q || SCENE[i]?.q || autoQuery(track.timeline[i].text) : cur.tag || '';
   const o = document.createElement('div');
   o.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4';
   o.innerHTML = `<div class="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-5 flex flex-col gap-3 text-zinc-300">
@@ -594,7 +594,7 @@ function imageEditor({ i = null, a = null }) {
   const search = async () => {
     const q = Q('[data-q]').value.trim(), R = Q('[data-res]'); if (!q) return;
     R.innerHTML = '<span class="col-span-4 text-zinc-500">Buscando...</span>';
-    const l = await searchScene(scene ? i : 'x' + q, q, track ? topicOf(track.timeline) : '', VW / VH);
+    const l = await searchScene(scene ? i : 'x' + q, q, track ? topicOf(track.timeline) : '', VW / VH, scene ? SCENE[i] : {});
     if (scene) ov[i] = { ...ov[i], q };
     R.innerHTML = l.length ? l.slice(0, 16).map((c, k) => `<div data-c="${k}" class="tile" title="${escH(c.credit)}" style="background-image:url('${c.thumb}')"></div>`).join('') : '<span class="col-span-4 text-zinc-500">Nada encontrado. Tente outro termo, use as fontes externas ou ative mais fontes na aba Mídia.</span>';
     R.querySelectorAll('[data-c]').forEach(x => x.onclick = () => { R.querySelectorAll('.tile').forEach(y => y.classList.toggle('on', y === x)); const c = l[x.dataset.c]; Q('[data-url]').value = c.src; pick(c.src, null, c.credit); });

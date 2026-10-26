@@ -41,14 +41,19 @@ export async function translate(q) {
 
 const toks = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 2).map(w => w.replace(/(es|s)$/, ''));
 
-// terms = { q: termo da cena, topic: assunto geral }; ar = proporção do vídeo
-export async function searchImages({ q, topic = '' }, ar = 16 / 9) {
-  const en = await translate(q), enT = topic ? await translate(topic) : '';
-  const all = (await Promise.all(active().map(k => SRC[k](k === 'openverse' ? en : q, ar, cfg.keys[k]).then(l => l.map((x, i) => ({ ...x, prov: k, rank: i }))).catch(() => [])))).flat();
-  const Q = new Set([...toks(q), ...toks(en)]), Tp = new Set([...toks(topic), ...toks(enT)]), seen = new Set();
+// terms = { q: termo da cena, topic: assunto geral, entity/ctx: artigos da Wikipedia (entities.js) }; ar = proporção do vídeo
+export async function searchImages({ q, topic = '', entity, ctx }, ar = 16 / 9) {
+  const clean = t => (t || '').replace(/\s*\(.*\)$/, ''), eName = clean(entity?.title), en = entity?.en ? clean(entity.en) : await translate(q), enT = topic ? await translate(topic) : '';
+  // entidade: imagem principal do artigo + busca pelo nome exato; nomes de pessoas/lugares não são traduzidos
+  const lead = entity?.img ? [{ src: entity.img, thumb: entity.img, w: entity.w, h: entity.h, text: `${eName} ${entity.en || ''} ${entity.desc}`, credit: `Wikipedia · ${eName}`, prov: 'wikimedia', rank: -6 }] : [];
+  const qFor = k => k === 'openverse' ? (entity ? en || eName : en) : k === 'wikimedia' ? (entity ? eName : q) : (entity ? (k === 'pexels' ? eName : en || eName) : q);
+  const all = [...lead, ...(await Promise.all(active().map(k => SRC[k](qFor(k), ar, cfg.keys[k]).then(l => l.map((x, i) => ({ ...x, prov: k, rank: i }))).catch(() => [])))).flat()];
+  const Q = new Set([...toks(q), ...toks(en)]), Tp = new Set([...toks(topic), ...toks(enT), ...toks(clean(ctx?.title)), ...toks(clean(ctx?.en))]), E = new Set([...toks(eName), ...toks(clean(entity?.en))]), seen = new Set();
   return all.filter(x => x.src && !seen.has(x.src) && seen.add(x.src)).map(x => {
     let s = PROVIDERS[x.prov].prior - x.rank * .08;
-    new Set(toks(x.text)).forEach(w => s += Q.has(w) ? 2.5 : Tp.has(w) ? 1 : 0);
+    const W = new Set(toks(x.text));
+    W.forEach(w => s += E.has(w) ? 4 : Q.has(w) ? 2.5 : Tp.has(w) ? 1.2 : 0);
+    if (E.size && ![...E].some(w => W.has(w))) s -= 5; // imagem genérica que não mostra a entidade citada
     if (x.w && x.h) { s -= Math.abs(Math.log(x.w / x.h / ar)) * 1.5; if (Math.min(x.w, x.h) < 700) s -= 2; }
     return { ...x, score: s };
   }).sort((a, b) => b.score - a.score);

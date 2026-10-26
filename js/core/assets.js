@@ -3,6 +3,7 @@ import { searchImages } from '../media/search.js';
 import { keywords } from './keywords.js';
 import { norm } from './words.js';
 import { clipMatrix } from '../ai/clip.js';
+import { analyze, queryOf } from './entities.js';
 
 export const assets = []; // {id, src, img, tag, credit, origin}
 
@@ -33,24 +34,32 @@ export const autoQuery = text => keywords(text, 2).join(' ');
 export const CANDS = {}; // candidatas por cena: { q, list }
 
 // busca e devolve candidatas ranqueadas para uma cena (com cache)
-export async function searchScene(i, q, topic, ar) {
+export async function searchScene(i, q, topic, ar, an = {}) {
   if (CANDS[i]?.q === q) return CANDS[i].list;
-  let list = await searchImages({ q, topic }, ar).catch(() => []);
-  if (!list.length && q.includes(' ')) list = await searchImages({ q: q.split(' ')[0], topic }, ar).catch(() => []);
+  const custom = an.q && an.q !== q; // termo digitado pelo usuário: a entidade automática não se aplica
+  let list = await searchImages({ q, topic, entity: custom ? null : an.entity, ctx: an.ctx }, ar).catch(() => []);
+  if (!list.length && q.includes(' ')) list = await searchImages({ q: q.split(' ').slice(-2).join(' '), topic }, ar).catch(() => []);
   CANDS[i] = { q, list }; return list;
 }
 
-export async function plan(tl, { search, clip, onStatus, ar = 16 / 9, queries = [] }) {
+export const SCENE = []; // análise por cena (entidade, contexto, termo sugerido)
+export async function plan(tl, { search, clip, onStatus, ar = 16 / 9, queries = [], title = '' }) {
   const P = tl.map(() => []), used = new Set(), topic = topicOf(tl);
+  if (search) {
+    onStatus?.('ENTENDENDO O ROTEIRO (WIKIPEDIA)');
+    const A = await analyze(tl, { title }).catch(e => (console.warn('entidades', e), tl.map(() => ({ kw: [] }))));
+    SCENE.length = 0; A.forEach((a, i) => SCENE.push({ ...a, q: a.entity || a.ctx ? queryOf(a) : autoQuery(tl[i].text) }));
+  }
+  const qOf = i => queries[i] || SCENE[i]?.q || autoQuery(tl[i].text);
   for (const a of assets) if (a.tag && a.origin !== 'search') tl.forEach((s, i) => hit(a.tag, s.text) && (P[i].push(a), used.add(a)));
 
   // busca todas as cenas em paralelo; a escolha (sem repetir imagem) é sequencial
-  if (search) { let k = 0; await Promise.all(tl.map((s, i) => !P[i].length && searchScene(i, queries[i] || autoQuery(s.text), topic, ar).finally(() => onStatus?.(`BUSCANDO IMAGENS ${++k}/${tl.length}`)))); }
+  if (search) { let k = 0; await Promise.all(tl.map((s, i) => !P[i].length && searchScene(i, qOf(i), topic, ar, SCENE[i]).finally(() => onStatus?.(`BUSCANDO IMAGENS ${++k}/${tl.length}`)))); }
   if (search) for (const [i, s] of tl.entries()) {
     if (P[i].length) continue;
     onStatus?.(`BUSCANDO IMAGENS ${i + 1}/${tl.length}`);
-    const q = queries[i] || autoQuery(s.text);
-    for (const r of (await searchScene(i, q, topic, ar)).slice(0, 5)) {
+    const q = qOf(i);
+    for (const r of (await searchScene(i, q, topic, ar, SCENE[i])).slice(0, 5)) {
       if (assets.some(x => x.src === r.src && used.has(x))) continue;
       try { const a = await addAsset({ src: r.src, credit: r.credit, tag: q, origin: 'search' }); P[i].push(a); used.add(a); break; } catch { }
     }
