@@ -20,7 +20,7 @@ export async function exportMP4({ canvas, audio, duration, fps, draw, onProgress
   const n = Math.ceil(duration * fps);
   for (let i = 0; i < n; i++) {
     if (cancelled?.()) { await out.cancel(); throw Error('CANCELADO'); }
-    draw(i / fps);
+    await draw(i / fps);
     await vs.add(i / fps, 1 / fps);
     if (i % 4 === 0) onProgress?.(i / n, i, n);
     await tick();

@@ -1,4 +1,4 @@
-import { loadImage } from '../media/loader.js';
+import { loadImage, loadVideo } from '../media/loader.js';
 import { searchImages } from '../media/search.js';
 import { keywords } from './keywords.js';
 import { norm } from './words.js';
@@ -15,6 +15,15 @@ export async function addAsset({ src, tag = '', credit = '', origin = 'url', id 
   return n;
 }
 export const removeAsset = a => assets.splice(assets.indexOf(a), 1);
+// vídeo: img = canvas com o quadro atual (as composições tratam como imagem); vid = elemento/blob/duração
+export async function addVideo({ src, blob, thumb, tag = '', credit = '', origin = 'search', id }) {
+  const a = assets.find(x => x.src === src);
+  if (a) return a;
+  const v = await loadVideo(src, blob, thumb), n = { id: id || Math.random().toString(36).slice(2), src, kind: 'video', img: v.canvas, vid: v, tag, credit, origin };
+  if (origin === 'file') n.blob = v.blob;
+  assets.push(n);
+  return n;
+}
 
 // linhas: "url" ou "palavra | url"
 export const parseUrls = t => t.split('\n').map(l => l.trim()).filter(Boolean)

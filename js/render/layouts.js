@@ -13,6 +13,7 @@ export const cl = x => Math.min(1, Math.max(0, x)), ease = x => 1 - (1 - cl(x)) 
 // ---------- texturas ----------
 const tc = new WeakMap(), bc = new WeakMap(), gc = {};
 const tex = im => tc.get(im) ?? (tc.set(im, Texture.from(im)), tc.get(im));
+export const refreshTex = im => tc.get(im)?.source.update(); // canvas de vídeo redesenhado
 const canvasTex = (w, h, draw) => { const c = Object.assign(document.createElement('canvas'), { width: w, height: h }); draw(c.getContext('2d'), w, h); return Texture.from(c); };
 const blurTex = im => bc.get(im) ?? (bc.set(im, canvasTex(384, 216, (g, w, h) => { const k = Math.max(w / im.width, h / im.height); g.filter = 'blur(10px) brightness(.55) saturate(1.3)'; g.drawImage(im, (w - im.width * k) / 2, (h - im.height * k) / 2, im.width * k, im.height * k); })), bc.get(im));
 const radial = (stops, key) => gc[key] ??= canvasTex(512, 512, (g, w) => { const r = g.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2); stops.forEach(([o, c]) => r.addColorStop(o, c)); g.fillStyle = r; g.fillRect(0, 0, w, w); });

@@ -9,7 +9,7 @@ export async function exportNative({ canvas, audio, duration, fps, draw, onProgr
   try {
     for (let i = 0; i < n; i++) {
       if (cancelled?.()) throw Error('CANCELADO');
-      draw(i / fps);
+      await draw(i / fps);
       rc.drawImage(canvas, 0, 0);
       fly.push(call('ff_frame', new Uint8Array(rc.getImageData(0, 0, w, h).data.buffer)));
       if (fly.length > 2) await fly.shift();

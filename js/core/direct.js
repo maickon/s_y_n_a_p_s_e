@@ -7,9 +7,11 @@ import { norm } from './words.js';
 export const INTRO = 2.8;
 
 // monta a edição: segmentos (cortes), títulos cinéticos, intro e outro
-export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto', outro = { on: true, title: 'FIM DA TRANSMISSÃO', lines: [], auto: true }, intro = { dur: INTRO }, vt = { type: 'doc', cards: [] }, breaks = [] }) {
+export function direct(tl, P, { variation = 0, ov = [], title = '', credits = [], grades, grade = 'auto', outro = { on: true, title: 'FIM DA TRANSMISSÃO', lines: [], auto: true }, intro = { dur: INTRO }, vt = { type: 'doc', cards: [] }, breaks = [], vids = {} }) {
   const end = tl.at(-1).end, dur = end + (outro.on ? 4.5 : 1.2), segs = [];
   const pre = i => breaks.filter(b => b.before === i);
+  const V = (im, vin = 0) => im?.kind === 'video' ? { vid: im.vid, vin } : {}; // segmento de vídeo: quadro no canvas do asset
+  P = P.map((l, i) => vids['s' + i] && !ov[i]?.img ? [vids['s' + i], ...l] : l); // cenas escolhidas para B-roll abrem com o vídeo
   tl.forEach((s, i) => {
     const o = ov[i] || {}, imgs = o.noimg ? [] : o.img ? [o.img] : P[i];
     if (!imgs.length) return;
@@ -22,24 +24,27 @@ export function direct(tl, P, { variation = 0, ov = [], title = '', credits = []
     cuts.push(b);
     for (let k = 0; k < n; k++) {
       const im = imgs[k % imgs.length], alt = imgs[(k + 1) % imgs.length] !== im ? imgs[(k + 1) % imgs.length] : P[(i + 1) % P.length]?.[0] || im;
-      segs.push({ img: im.img, alt: alt.img, credit: im.credit, a: cuts[k], b: cuts[k + 1], seed: hash(s.text) + k * 7919 + variation * 104729, scene: i, layout: o.layout, trans: o.trans, grade: o.grade });
+      segs.push({ img: im.img, alt: alt.img, credit: im.credit, a: cuts[k], b: cuts[k + 1], seed: hash(s.text) + k * 7919 + variation * 104729, scene: i, layout: o.layout, trans: o.trans, grade: o.grade, ...V(im, k ? 3 * k : o.vin || 0) });
     }
   });
   // pausas de cinema: montagem própria (teaser = cortes rápidos do que vem; capítulo/respiro = plano lento da próxima cena)
   const firstImg = k => { const o = ov[k] || {}; return o.noimg ? null : (o.img ? [o.img] : P[k] || [])[0]; };
   breaks.forEach((bk, j) => {
     const R = rng(hash(bk.kind) + bk.before * 13 + variation * 7 + j);
+    const bv = vids[`${bk.kind}@${bk.before}`];
     if (bk.kind === 'teaser') {
-      const pool = P.map((l, k) => firstImg(k) && (l[1] || l[0])).filter(Boolean), n = Math.max(3, Math.round(bk.dur / 1.15)), T = ['flash', 'whip', 'zoom', 'glitch', 'flash'], L = ['full', 'push', 'zoomout', 'focus', 'letterbox'];
+      const pool = P.map((l, k) => firstImg(k) && (l[1] || l[0])).filter(Boolean);
+      if (bv) pool.splice(0, 0, bv), pool.splice(Math.ceil(pool.length / 2), 0, bv); // o vídeo do teaser entra em dois cortes
+      const n = Math.max(3, Math.round(bk.dur / 1.15)), T = ['flash', 'whip', 'zoom', 'glitch', 'flash'], L = ['full', 'push', 'zoomout', 'focus', 'letterbox'];
       if (!pool.length) return;
       for (let k = 0; k < n; k++) { const im = pool[Math.round(k * (pool.length - 1) / Math.max(1, n - 1))], a = bk.a - .35 + k * bk.dur / n;
-        segs.push({ img: im.img, alt: im.img, credit: im.credit, a, b: k === n - 1 ? bk.b - .35 : a + bk.dur / n, seed: hash('t' + k) + variation * 104729, scene: 0, layout: L[(k + (R() * 5 | 0)) % 5], trans: k ? T[k % T.length] : 'dipblack', brk: 'teaser' }); }
+        segs.push({ img: im.img, alt: im.img, credit: im.credit, a, b: k === n - 1 ? bk.b - .35 : a + bk.dur / n, seed: hash('t' + k) + variation * 104729, scene: 0, layout: im.kind === 'video' ? 'full' : L[(k + (R() * 5 | 0)) % 5], trans: k ? T[k % T.length] : 'dipblack', brk: 'teaser', ...V(im, 2 * k) }); }
       return;
     }
-    const l = (ov[bk.before]?.img ? [ov[bk.before].img] : P[bk.before]) || [], im = l[1] || P[bk.before + 1]?.[0] || l[0] || P[bk.before - 1]?.[0];
+    const l = (ov[bk.before]?.img ? [ov[bk.before].img] : P[bk.before]) || [], im = bv || l.find(x => x.kind !== 'video' && x !== l[0]) || P[bk.before + 1]?.[0] || l[0] || P[bk.before - 1]?.[0];
     if (!im) return;
     const LB = bk.kind === 'chapter' ? ['letterbox', 'focus', 'vignette', 'full'] : ['full', 'pan', 'tilt', 'parallax', 'zoomout', 'letterbox'], TB = bk.kind === 'chapter' ? ['dipblack', 'burn', 'lightleak'] : ['dissolve', 'fade', 'lightleak', 'blur'];
-    segs.push({ img: im.img, alt: im.img, credit: im.credit, a: bk.a - (breaks.some(o => Math.abs(o.b - bk.a) < .01) ? .35 : 0), b: bk.b - .35, seed: hash(bk.kind + bk.before) + variation * 104729, scene: bk.before, layout: LB[R() * LB.length | 0], trans: TB[R() * TB.length | 0], brk: bk.kind });
+    segs.push({ img: im.img, alt: im.img, credit: im.credit, a: bk.a - (breaks.some(o => Math.abs(o.b - bk.a) < .01) ? .35 : 0), b: bk.b - .35, seed: hash(bk.kind + bk.before) + variation * 104729, scene: bk.before, layout: im.kind === 'video' ? (bk.kind === 'chapter' ? 'letterbox' : 'full') : LB[R() * LB.length | 0], trans: TB[R() * TB.length | 0], brk: bk.kind, ...V(im) });
   });
   segs.sort((x, y) => x.a - y.a);
   prepare(segs, { grades, grade, ...(WEIGHTS[vt.type] || {}) });

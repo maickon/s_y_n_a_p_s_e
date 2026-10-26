@@ -24,13 +24,15 @@ import { STYLES } from './core/styles.js';
 import { PACKS } from './audio/sfx.js';
 import { CAP_STYLES, FONTS, PALETTES } from './render/captions.js';
 import { VIG_TPL, VIG_SND, VIG_AUTO_SND } from './render/vignette.js';
-import { assets, addAsset, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS, SCENE } from './core/assets.js';
+import { assets, addAsset, addVideo, removeAsset, parseUrls, plan, searchScene, topicOf, autoQuery, CANDS, SCENE } from './core/assets.js';
 import { PROVIDERS, setConfig, active as activeSrc } from './media/search.js';
 import { loadImage } from './media/loader.js';
 import { SOURCES as TSRC, EXTERNAL as TEXT, trends } from './media/trends.js';
 import { scriptFromTopic, sentences } from './core/scriptgen.js';
 import { TYPES, PRESETS, parseScene, formatScript, cardEvents } from './core/vtypes.js';
 import { CINE_DEF, structure, cinemaPlan, withBreaks, breakEvents, musicSections } from './core/cinema.js';
+import { planVideos } from './core/broll.js';
+import { searchVideos } from './media/search.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
@@ -47,10 +49,11 @@ Esquecemos o som da chuva antes da entropia final.
 Sua consciência foi transcrita com sucesso no servidor do nada.`;
 
 const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-select'), pitch: $('voice-pitch'), rate: $('voice-rate') };
-let cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
-const frame = (t, o) => { bg.draw(); comp.render(t, o); };
+let cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas, { onNeedFrame: () => !pl.playing && drawAt(pl.time) });
+let plRef = null; // player (criado depois); a prévia de vídeo precisa saber se está tocando
+const frame = (t, o) => { bg.draw(); comp.render(t, { ...o, playing: !!plRef?.playing }); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
-let ctx, rec, track, base, struct = { lines: [], chapters: {}, paras: new Set() }, cineMemo = {}, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
+let VID = {}, ctx, rec, track, base, struct = { lines: [], chapters: {}, paras: new Set() }, cineMemo = {}, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 // status no topo + painel flutuante (etapas em andamento)
 const status = (t, c = 'bg-zinc-600', p) => { $('status-text').textContent = $('status-text').title = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; if (!/animate-pulse/.test(c)) return progDone();
@@ -94,6 +97,13 @@ async function run(fn) {
   if (mix) ['btn-vary', ...EXP].forEach(b => enable($(b), true));
 }
 
+const vbud = () => $('vid-budget-v').textContent = $('vid-budget').value + '%';
+$('vid-budget').addEventListener('input', vbud);
+// B-roll: vídeos só nos momentos certos (teaser, capítulos, respiros e poucas cenas)
+async function broll() {
+  rebuild();
+  VID = $('vid-on').checked && $('img-search').checked ? await planVideos(track, SCENE, { ar: VW / VH, topic: topicOf(track.timeline), title: $('video-title').value.trim(), budget: +$('vid-budget').value / 100, onStatus: m => status(m, 'bg-yellow-400 animate-pulse') }).catch(e => (console.warn('B-roll', e), {})) : {};
+}
 // estrutura de cinema: aplica as pausas sobre a voz base (memorizado)
 const cineCfg = () => ({ on: $('cine-on').checked, teaser: +$('cine-teaser').value, chap: $('cine-chap').value, breath: $('cine-breath').value, music: $('cine-music').checked });
 function rebuild() {
@@ -110,7 +120,7 @@ async function render() {
   rebuild();
   dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(),
     credits: ['Voz: ' + el.voice.selectedOptions[0].text + ' · ' + el.voice.value.split(':')[0], 'Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')],
-    vt: { type: $('vtype').value, cards }, breaks: track.breaks, intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
+    vt: { type: $('vtype').value, cards }, breaks: track.breaks, vids: VID, intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
   readText();
   comp.load(segsCur = dir.segs);
   if (!pl.playing) drawAt(pl.time); // o visual atualiza na hora; o áudio entra quando a mixagem terminar
@@ -126,7 +136,7 @@ async function render() {
   }
   mixMem = { key: mk, buf: mix };
   // descarta resultados de busca automática que não estão mais em uso
-  assets.filter(x => x.origin === 'search' && !P.some(l => l.includes(x)) && !ov.some(o => o?.img === x)).forEach(removeAsset);
+  assets.filter(x => x.origin === 'search' && !P.some(l => l.includes(x)) && !ov.some(o => o?.img === x) && !Object.values(VID).includes(x)).forEach(removeAsset);
   grid(P); editor(); marks();
   const first = !pl.time && !pl.playing;
   pl.setBuffer(mix);
@@ -155,7 +165,7 @@ function generate() {
     await syncUrls();
     const texts = track.timeline.map(s => s.text), R = restored && restored.texts?.join('\n') === texts.join('\n') ? restored : null;
     if (R) { P = R.P.map(l => l.map(id => assets.find(a => a.id === id)).filter(Boolean)); variation = R.variation || 0; ov = (R.ov || []).map(o => o && { ...o, img: o.img && assets.find(a => a.id === o.img) }); }
-    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value });
+    if (!R || P.some(l => !l.length)) P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value }); await broll();
     if (!R) { variation = 0; ov = []; }
     restored = null;
     await render();
@@ -172,13 +182,13 @@ async function flush() {
   const lv = pend; pend = 0;
   await run(async () => {
     if (lv >= 4) { base = await makeTrack(base.timeline.map(s => s.text)); rebuild(); }
-    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value }); }
+    if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value }); await broll(); }
     await render();
   });
 }
 const on = (ids, ev, lv) => ids.split(' ').forEach(id => $(id).addEventListener(ev, () => live(lv)));
 on('voice-select effect-select voice-pitch voice-rate', 'change', 4);
-on('img-search img-clip', 'change', 3);
+on('img-search img-clip vid-on vid-budget', 'change', 3);
 on('video-title outro-title outro-lines', 'input', 2);
 on('outro-on outro-auto', 'change', 2);
 on('style-select grade-select', 'change', 2);
@@ -201,11 +211,12 @@ $('btn-mp4').onclick = async () => {
   const [h, fps] = $('mp4-q').value.split('p').map(Number), k = h / 1080, aspect = $('aspect').value;
   const S = { tl: track.timeline, caps, dir, segs: segsCur, style: el.style.selectedIndex, tx: { ...TX, wm: { ...TX.wm } }, mix };
   exporting = true;
-  const xc = document.createElement('canvas'), xbg = createBg(VW, VH), xcomp = await createCompositor(xc, xbg.canvas);
+  const xc = document.createElement('canvas'), xbg = createBg(VW, VH), xcomp = await createCompositor(xc, xbg.canvas, { exact: true });
   xcomp.load(S.segs);
   const out = h === 1080 ? xc : Object.assign(document.createElement('canvas'), { width: Math.round(xc.width * k / 2) * 2, height: Math.round(xc.height * k / 2) * 2 }), og = out !== xc ? out.getContext('2d') : null;
   const m = progress({ title: `Exportando MP4 ${aspect} ${h}p${fps} · pode continuar editando`, source: xc, floating: true });
-  const draw = t => {
+  const draw = async t => {
+    await xcomp.prefetch(t);
     const i = S.tl.findLastIndex(s => t >= s.start - .05), s = S.tl[i];
     xbg.u.style.value = S.style; xbg.u.seed.value = s ? hash(s.text) % 100 : 0; xbg.u.glitch.value = s ? Math.max(0, 1 - (t - s.start) / .3) : 0; xbg.u.t.value = t * 1.8;
     xbg.draw(); xcomp.render(t, { caps: S.caps, timeline: S.tl, style: S.style, dir: S.dir, tx: S.tx });
@@ -252,7 +263,7 @@ function grid(P = []) {
     const d = document.createElement('div');
     d.className = 'relative aspect-video rounded overflow-hidden border border-zinc-700 group cursor-pointer hover:border-emerald-400';
     d.title = [a.tag, a.credit].filter(Boolean).join(' · ');
-    d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span><button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
+    d.innerHTML = `<img src="${a.img.src}" class="w-full h-full object-cover"><span class="absolute bottom-0 left-0 text-[9px] bg-black/70 px-1 text-emerald-300">${sc(a) ? 'C' + sc(a) : a.origin === 'search' ? 'web' : ''}</span>${a.kind === 'video' ? '<span class="absolute top-0 left-0 text-[9px] bg-black/75 px-1 text-yellow-300">▶ vídeo</span>' : ''}<button class="absolute top-0 right-0 hidden group-hover:block bg-red-600 text-white text-[10px] px-1">✕</button>`;
     d.querySelector('img').onclick = () => editAsset(a);
     d.querySelector('button').onclick = () => {
       removeAsset(a); live(3); if (a.origin === 'file') saveFiles();
@@ -300,6 +311,7 @@ const pl = createPlayer({
   },
   onEnd: () => rec?.state === 'recording' && rec.stop()
 });
+plRef = pl;
 function marks() {
   const D = mix.duration;
   $('pl-seek').max = D;
@@ -533,7 +545,7 @@ async function applyAspect() {
   if (cv.width === VW * 1.5 && cv.height === VH * 1.5) return;
   comp.destroy(); bg.dispose();
   cv = Object.assign(document.createElement('canvas'), { id: 'view-canvas', className: 'w-full h-full' }); sc.prepend(cv);
-  bg = createBg(VW, VH); comp = await createCompositor(cv, bg.canvas);
+  bg = createBg(VW, VH); comp = await createCompositor(cv, bg.canvas, { onNeedFrame: () => !pl.playing && drawAt(pl.time) });
   if (track) { caps = groups(track.timeline, capMax()); comp.load(segsCur); }
   drawAt(pl.time);
 }
@@ -567,16 +579,17 @@ function imageEditor({ i = null, a = null }) {
   const o = document.createElement('div');
   o.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4';
   o.innerHTML = `<div class="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-zinc-950 border border-purple-800/60 rounded-xl shadow-2xl p-5 flex flex-col gap-3 text-zinc-300">
-    <div class="flex items-center"><h3 class="pane-h flex-1"><i data-lucide="image" class="w-4 h-4"></i> ${scene ? `Imagem da cena ${i + 1}` : 'Editar imagem'}</h3><button data-x class="pbtn">✕</button></div>
+    <div class="flex items-center"><h3 class="pane-h flex-1"><i data-lucide="image" class="w-4 h-4"></i> ${scene ? `Mídia da cena ${i + 1}` : 'Editar imagem'}</h3><button data-x class="pbtn">✕</button></div>
     ${scene ? `<p class="text-[11px] text-zinc-500 italic">“${escH(track.timeline[i].text)}”</p>` : ''}
     <div data-drop class="relative aspect-video rounded-lg bg-black bg-center bg-contain bg-no-repeat border-2 border-dashed border-zinc-800 flex items-center justify-center text-zinc-600" data-prev ${cur ? `style="background-image:url('${cur.img.src}')"` : ''}><span data-msg>${cur ? '' : 'Sem imagem'}</span><span class="absolute bottom-1 right-2 text-[10px] text-zinc-500">arraste uma imagem aqui · ou Ctrl+V para colar</span></div>
     <div class="text-[11px] text-zinc-500">${cur ? escH(cur.credit || (cur.origin === 'file' ? 'Arquivo enviado' : cur.origin === 'search' ? 'Busca automática' : 'URL')) + ' · ' + (used.length ? 'usada na(s) cena(s) ' + used.join(', ') : 'não usada') : ''}</div>
-    <div class="fl">Pesquisar imagem<div class="flex gap-2"><input data-q class="inp !p-2" value="${escH(term)}"><button data-search class="btn !py-2 bg-purple-700 hover:bg-purple-600 text-white"><i data-lucide="search" class="w-4 h-4"></i> Buscar aqui</button></div>
+    ${scene ? `<label data-trim class="${cur?.kind === 'video' ? '' : 'hidden'}">Início do trecho do vídeo <span data-trimv class="val">${(ov[i]?.vin || 0).toFixed(1)} s</span><input data-trimr type="range" min="0" max="${Math.max(1, (cur?.vid?.dur || 10) - 2).toFixed(1)}" step=".5" value="${ov[i]?.vin || 0}"></label>` : ''}
+    <div class="fl"><div class="flex items-center gap-2"><span class="flex-1">Pesquisar ${scene ? 'mídia' : 'imagem'}</span>${scene ? '<div class="flex rounded-lg overflow-hidden border border-zinc-800 text-[11px]"><button data-mode="img" class="asp on">Imagens</button><button data-mode="vid" class="asp">▶ Vídeos</button></div>' : ''}</div><div class="flex gap-2"><input data-q class="inp !p-2" value="${escH(term)}"><button data-search class="btn !py-2 bg-purple-700 hover:bg-purple-600 text-white"><i data-lucide="search" class="w-4 h-4"></i> Buscar aqui</button></div>
       <div class="flex flex-wrap gap-1.5">${EXT.map(([n], k) => `<button data-ext="${k}" class="px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-[11px] flex items-center gap-1">${n} <i data-lucide="external-link" class="w-3 h-3"></i></button>`).join('')}</div>
       <p class="text-[10px] text-zinc-500 leading-relaxed">Nas fontes externas: botão direito na imagem → <b>Copiar endereço da imagem</b> (cole no campo URL) ou <b>Copiar imagem</b> (volte aqui e aperte Ctrl+V).</p>
       <div data-res class="grid grid-cols-4 gap-1.5"></div></div>
     <label class="fl">URL da imagem<div class="flex gap-2"><input data-url class="inp !p-2 text-[11px]" placeholder="https://..." value="${cur && cur.origin !== 'file' ? escH(cur.src) : ''}"><button data-load class="btn !py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200">Usar URL</button></div></label>
-    <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Enviar do computador<input data-file type="file" accept="image/*" hidden></label>
+    <label class="upl"><i data-lucide="upload" class="w-4 h-4"></i> Enviar do computador${scene ? ' (imagem ou vídeo)' : ''}<input data-file type="file" accept="image/*${scene ? ',video/*' : ''}" hidden></label>
     ${scene ? '' : `<label class="fl">Palavra-chave (liga a imagem à cena que contém a palavra)<input data-tag class="inp !p-2" value="${escH(cur.tag || '')}"></label>`}
     <div class="flex flex-wrap gap-2 justify-between mt-1">
       <button data-del class="btn bg-red-900 hover:bg-red-800 text-white" ${cur ? '' : 'disabled'}><i data-lucide="trash-2" class="w-4 h-4"></i> ${scene ? 'Remover da cena' : 'Excluir imagem'}</button>
@@ -584,8 +597,11 @@ function imageEditor({ i = null, a = null }) {
       <button data-save class="btn bg-emerald-700 hover:bg-emerald-600 text-white"><i data-lucide="check" class="w-4 h-4"></i> Aplicar</button></div></div></div>`;
   document.body.appendChild(o); lucide.createIcons();
   const Q = sel => o.querySelector(sel), msg = t => { Q('[data-prev]').style.backgroundImage = ''; Q('[data-msg]').textContent = t; };
-  let next = null; // { src, img, blob, credit }
+  let next = null, mode = 'img'; // next: { src, img, blob, credit } ou { kind: 'video', src, blob, thumb, credit }
+  const isVid = (u, blob) => scene && (blob ? blob.type.startsWith('video/') : mode === 'vid' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || ''));
+  const pickVid = (src, blob, credit = '', thumb = '') => { next = { kind: 'video', src: blob ? URL.createObjectURL(blob) : src, blob, credit, thumb }; Q('[data-prev]').style.backgroundImage = thumb ? `url('${thumb}')` : ''; Q('[data-msg]').textContent = '▶ vídeo selecionado' + (blob ? ' (' + (blob.size / 1048576).toFixed(1) + ' MB)' : ''); Q('[data-trim]')?.classList.remove('hidden'); };
   const pick = async (src, blob, credit = '') => {
+    if (isVid(src, blob)) return pickVid(src, blob, credit);
     msg('Carregando...');
     try { const img = await loadImage(blob ? URL.createObjectURL(blob) : src); next = { src: blob ? img.src : src, img, blob, credit }; Q('[data-msg]').textContent = ''; Q('[data-prev]').style.backgroundImage = `url('${img.src}')`; }
     catch { msg('Não foi possível carregar essa imagem'); next = null; }
@@ -605,11 +621,13 @@ function imageEditor({ i = null, a = null }) {
   const search = async () => {
     const q = Q('[data-q]').value.trim(), R = Q('[data-res]'); if (!q) return;
     R.innerHTML = '<span class="col-span-4 text-zinc-500">Buscando...</span>';
-    const l = await searchScene(scene ? i : 'x' + q, q, track ? topicOf(track.timeline) : '', VW / VH, scene ? SCENE[i] : {});
+    const l = mode === 'vid' ? await searchVideos({ q, topic: track ? topicOf(track.timeline) : '', entity: q === SCENE[i]?.q ? SCENE[i]?.entity : null }, VW / VH).catch(() => []) : await searchScene(scene ? i : 'x' + q, q, track ? topicOf(track.timeline) : '', VW / VH, scene ? SCENE[i] : {});
     if (scene) ov[i] = { ...ov[i], q };
-    R.innerHTML = l.length ? l.slice(0, 16).map((c, k) => `<div data-c="${k}" class="tile" title="${escH(c.credit)}" style="background-image:url('${c.thumb}')"></div>`).join('') : '<span class="col-span-4 text-zinc-500">Nada encontrado. Tente outro termo, use as fontes externas ou ative mais fontes na aba Mídia.</span>';
-    R.querySelectorAll('[data-c]').forEach(x => x.onclick = () => { R.querySelectorAll('.tile').forEach(y => y.classList.toggle('on', y === x)); const c = l[x.dataset.c]; Q('[data-url]').value = c.src; pick(c.src, null, c.credit); });
+    R.innerHTML = l.length ? l.slice(0, 16).map((c, k) => `<div data-c="${k}" class="tile relative" title="${escH(c.credit)}" style="background-image:url('${c.thumb}')">${c.kind === 'video' ? `<span class="absolute bottom-0 right-0 text-[9px] bg-black/75 px-1">▶ ${c.dur ? Math.round(c.dur) + 's' : ''}</span>` : ''}</div>`).join('') : '<span class="col-span-4 text-zinc-500">Nada encontrado. Tente outro termo, use as fontes externas ou ative mais fontes na aba Mídia.</span>';
+    R.querySelectorAll('[data-c]').forEach(x => x.onclick = () => { R.querySelectorAll('.tile').forEach(y => y.classList.toggle('on', y === x)); const c = l[x.dataset.c]; Q('[data-url]').value = c.src; c.kind === 'video' ? pickVid(c.src, null, c.credit, c.thumb) : pick(c.src, null, c.credit); });
   };
+  o.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; o.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x === b)); search(); });
+  Q('[data-trimr]')?.addEventListener('input', e => Q('[data-trimv]').textContent = (+e.target.value).toFixed(1) + ' s');
   Q('[data-search]').onclick = search; Q('[data-q]').onkeydown = e => e.key === 'Enter' && search();
   if (scene && CANDS[i]?.list) search();
   Q('[data-load]').onclick = () => { const u = Q('[data-url]').value.trim(); /^https?:\/\//.test(u) ? pick(u) : warn('Informe uma URL começando com http(s)://'); };
@@ -627,7 +645,14 @@ function imageEditor({ i = null, a = null }) {
     const u = Q('[data-url]').value.trim();
     if (!next && u && u !== cur?.src && /^https?:/.test(u)) await pick(u);
     if (scene) {
-      if (!next) return close();
+      const vin = +(Q('[data-trimr]')?.value || 0);
+      if (!next) { if (cur?.kind === 'video' && vin !== (ov[i]?.vin || 0)) { ov[i] = { ...ov[i], img: cur, vin, noimg: undefined }; close(); return live(2); } return close(); }
+      if (next.kind === 'video') {
+        Q('[data-msg]').textContent = 'Baixando vídeo...';
+        try { const nv = await addVideo({ src: next.src, blob: next.blob, thumb: next.thumb, credit: next.credit, tag: Q('[data-q]').value.trim(), origin: next.blob ? 'file' : 'custom' }); if (next.blob) saveFiles(); ov[i] = { ...ov[i], img: nv, vin, noimg: undefined }; }
+        catch (e) { return Q('[data-msg]').textContent = 'Não foi possível usar esse vídeo: ' + e.message; }
+        close(); grid(P); return live(2);
+      }
       const na = await addAsset({ src: next.blob ? next.src : next.src, credit: next.credit, tag: Q('[data-q]').value.trim(), origin: next.blob ? 'file' : 'custom' });
       if (next.blob) { na.blob = next.blob; saveFiles(); }
       ov[i] = { ...ov[i], img: na, noimg: undefined }; close(); grid(P); return live(2);
@@ -802,10 +827,10 @@ async function manager() {
 $('btn-projects').onclick = manager;
 
 // --- Persistência (IndexedDB) ---
-const addFile = (f, id) => addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file', id }).then(a => (a.blob = f, a)).catch(() => { });
+const addFile = (f, id) => f.type?.startsWith('video/') ? addVideo({ src: URL.createObjectURL(f), blob: f, origin: 'file', id, tag: (f.name || '').replace(/\.\w+$/, '') }).catch(() => { }) : addAsset({ src: URL.createObjectURL(f), tag: (f.name || '').replace(/\.\w+$/, '').replace(/[-_]/g, ' '), origin: 'file', id }).then(a => (a.blob = f, a)).catch(() => { });
 const saveFiles = () => { store.set('imgs', assets.filter(a => a.blob).map(a => ({ id: a.id, blob: a.blob }))); dirty = true; };
 await store.bindForm(() => {
-  vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
+  vigUI(); typeUI(); refreshRanges(); count(); vbud(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
 // desktop: selo + área Sistema (versão, atualizações, diagnóstico de teclado)

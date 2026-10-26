@@ -58,3 +58,29 @@ export async function searchImages({ q, topic = '', entity, ctx }, ar = 16 / 9) 
     return { ...x, score: s };
   }).sort((a, b) => b.score - a.score);
 }
+
+// --- Vídeos (B-roll): Pexels Videos e Pixabay Videos (mesmas chaves das imagens) + Wikimedia Commons (sem chave) ---
+const pickFile = (fs, ar) => fs.filter(f => f.link && f.width).sort((a, b) => Math.abs(Math.min(a.width, a.height) - 720) - Math.abs(Math.min(b.width, b.height) - 720) || Math.abs(Math.log(a.width / a.height / ar)) - Math.abs(Math.log(b.width / b.height / ar)))[0];
+const VSRC = {
+  pexels: (q, ar, k) => get(`https://api.pexels.com/videos/search?query=${enc(q)}&per_page=10&orientation=${ori(ar)[1]}&size=medium`, { Authorization: k })
+    .then(d => d.videos.map(v => { const f = pickFile(v.video_files, ar); return f && { src: f.link, thumb: v.image, w: f.width, h: f.height, dur: v.duration, text: (v.url || '').split('/').filter(Boolean).pop()?.replace(/-\d+$/, '').replace(/-/g, ' ') || '', credit: `${v.user?.name || '?'} · Pexels` }; }).filter(Boolean)),
+  pixabay: (q, ar, k) => get(`https://pixabay.com/api/videos/?key=${k}&q=${enc(q)}&lang=pt&per_page=12&safesearch=true`)
+    .then(d => d.hits.map(h => { const f = h.videos.medium?.url ? h.videos.medium : h.videos.small; return f?.url && { src: f.url, thumb: f.thumbnail || h.videos.small?.thumbnail, w: f.width, h: f.height, dur: h.duration, text: h.tags, credit: `${h.user} · Pixabay` }; }).filter(Boolean)),
+  wikimedia: q => get(`https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=640&gsrsearch=${enc(q + ' filetype:video')}`)
+    .then(d => Object.values(d.query?.pages || {}).map(p => [p.title, p.imageinfo?.[0]]).filter(([, i]) => i && /webm/.test(i.mime) && i.size < 40e6)
+      .map(([t, i]) => ({ src: i.url, thumb: i.thumburl, w: i.width, h: i.height, dur: i.duration, text: (t || '').replace(/^File:|\.\w+$/g, ''), credit: `${strip(i.extmetadata?.Artist?.value) || 'Wikimedia'} · ${i.extmetadata?.LicenseShortName?.value || ''} (Wikimedia)` })))
+};
+export const videoActive = () => Object.keys(VSRC).filter(k => !cfg.off[k] && !cfg.off.video && (k === 'wikimedia' || cfg.keys[k]));
+export async function searchVideos({ q, topic = '', entity }, ar = 16 / 9, min = 2) {
+  const clean = t => (t || '').replace(/\s*\(.*\)$/, ''), eName = clean(entity?.title), en = entity?.en ? clean(entity.en) : await translate(q);
+  const qFor = k => k === 'wikimedia' ? (entity ? eName : q) : k === 'pexels' ? (entity ? eName : en) : (entity ? en || eName : q);
+  const all = (await Promise.all(videoActive().map(k => VSRC[k](qFor(k), ar, cfg.keys[k]).then(l => l.map((x, i) => ({ ...x, prov: k, rank: i, kind: 'video' }))).catch(() => [])))).flat();
+  const Q = new Set([...toks(q), ...toks(en)]), Tp = new Set(toks(topic)), E = new Set([...toks(eName), ...toks(clean(entity?.en))]);
+  return all.filter(x => !x.dur || x.dur >= min).map(x => {
+    let s = 1.5 - x.rank * .1; const W = new Set(toks(x.text));
+    W.forEach(w => s += E.has(w) ? 4 : Q.has(w) ? 2.5 : Tp.has(w) ? 1 : 0);
+    if (E.size && ![...E].some(w => W.has(w))) s -= 5;
+    if (x.w && x.h) s -= Math.abs(Math.log(x.w / x.h / ar)) * 1.5;
+    return { ...x, score: s };
+  }).sort((a, b) => b.score - a.score);
+}

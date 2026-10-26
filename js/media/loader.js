@@ -1,4 +1,4 @@
-import { isDesktop } from '../native.js';
+import { isDesktop, call } from '../native.js';
 import * as store from '../core/store.js';
 import { hashKey } from '../audio/bufstore.js';
 export const proxy = u => `https://wsrv.nl/?url=${encodeURIComponent(u)}&w=1920&h=1920&fit=inside&output=webp`;
@@ -25,3 +25,25 @@ async function cached(u) {
 }
 // tenta cache → direto (CORS) → proxy
 export const loadImage = async u => /^(blob|data):/.test(u) ? img(u) : cached(u).catch(() => img(u).catch(() => img(proxy(u))));
+
+// --- vídeo: baixado inteiro como Blob (desktop: nativo, sem CORS; web: fetch com CORS) e cacheado ---
+const VMAX = 60e6;
+async function videoBlob(src) {
+  const k = 'vid:' + hashKey(src), hit = await store.get(k).catch(() => null);
+  if (hit instanceof Blob) return hit;
+  const b = isDesktop ? new Blob([await call('http_bytes', { url: src })]) : await fetch(src, { mode: 'cors' }).then(r => r.ok ? r.blob() : Promise.reject(Error('HTTP ' + r.status)));
+  if (!b.size || b.size > VMAX) throw Error('vídeo grande demais');
+  store.set(k, b); return b;
+}
+// -> { el (HTMLVideoElement mudo), canvas (quadro atual, .src = miniatura), w, h, dur, blob }
+export async function loadVideo(src, blob, thumb) {
+  blob ??= await videoBlob(src);
+  const url = URL.createObjectURL(blob), el = document.createElement('video');
+  Object.assign(el, { muted: true, playsInline: true, preload: 'auto' });
+  await new Promise((ok, no) => { el.onloadeddata = ok; el.onerror = () => no(Error('formato de vídeo não suportado')); setTimeout(() => no(Error('tempo esgotado')), 25e3); el.src = url; });
+  const k = Math.min(1, 1280 / el.videoWidth), c = Object.assign(document.createElement('canvas'), { width: Math.round(el.videoWidth * k), height: Math.round(el.videoHeight * k) });
+  c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+  const t = Object.assign(document.createElement('canvas'), { width: 320, height: Math.round(320 * c.height / c.width) }); t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
+  c.src = thumb || t.toDataURL('image/jpeg', .7); // miniatura para grade/timeline/editor
+  return { el, canvas: c, w: el.videoWidth, h: el.videoHeight, dur: el.duration, blob, url };
+}

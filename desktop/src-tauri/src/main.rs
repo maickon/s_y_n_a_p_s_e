@@ -111,6 +111,18 @@ async fn update_install(app: AppHandle) -> R<()> {
 #[tauri::command]
 fn focus_webview(webview: tauri::Webview) { let _ = webview.set_focus(); }
 
+// download binário (vídeos de B-roll), sem CORS; limite de 80 MB
+#[tauri::command]
+async fn http_bytes(url: String) -> R<Response> {
+    if !url.starts_with("https://") { return Err("só https".into()); }
+    blocking(move || {
+        let r = ureq::AgentBuilder::new().try_proxy_from_env(true).timeout(std::time::Duration::from_secs(90)).build().get(&url).set("User-Agent", "Mozilla/5.0 SYNAPSE").call().map_err(|e| e.to_string())?;
+        let mut b = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::Read::take(r.into_reader(), 80 << 20), &mut b).map_err(|e| e.to_string())?;
+        Ok(Response::new(b))
+    }).await
+}
+
 #[tauri::command]
 fn reveal(path: String) { ffmpeg::reveal(&path) }
 
@@ -123,7 +135,7 @@ fn main() {
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
         .manage(Arc::new(neural::Neural::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get, update_check, update_install, focus_webview])
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get, update_check, update_install, focus_webview, http_bytes])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }
