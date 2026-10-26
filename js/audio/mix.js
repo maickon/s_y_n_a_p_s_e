@@ -37,35 +37,43 @@ async function stem(key, dur, build, onP, { tail = 0, keep = false } = {}) {
 export function mixKey(o) {
   const ST = STYLES[o.style] || STYLES[0];
   return hashKey(JSON.stringify([o.voiceKey, o.duration.toFixed(2), o.segs.map(s => [s.a.toFixed(2), s.trans, s.seed]), o.timeline.map(s => [s.start.toFixed(2), s.end.toFixed(2)]),
-    o.style, o.seed, o.musicName || '', o.amb === 'auto' ? ST.amb : o.amb, o.pack === 'auto' ? ST.sfx : o.pack, o.prof === 'auto' ? ST.mus : o.prof, o.intro, o.vol, o.extra]));
+    o.style, o.seed, o.musicName || '', o.amb === 'auto' ? ST.amb : o.amb, o.pack === 'auto' ? ST.sfx : o.pack, o.prof === 'auto' ? ST.mus : o.prof, o.intro, o.vol, o.extra, o.sections]));
 }
 
-export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', intro, prof = 'auto', extra = [], norm = true }, onP) {
+export async function mixdown({ voice, timeline, segs, duration, style, seed, musicBuf, amb, vol, pack = 'auto', intro, prof = 'auto', extra = [], sections = [], norm = true }, onP) {
   const ST = STYLES[style] || STYLES[0], D = duration + 1.5;
   const p = prof === 'auto' ? ST.mus : +prof, kind = amb === 'auto' ? ST.amb : amb, pk = pack === 'auto' ? ST.sfx : pack;
   // música e ambiente: loops renderizados uma vez (independem da duração do vídeo)
-  const ML = loopLen(p), mus = musicBuf || await stem(`m|${p}|${seed}`, ML, (c, o) => music(c, o, ML, p, seed), x => onP?.('Compondo música (loop)', x), { tail: 2.5, keep: true });
+  const ML = loopLen(p), song = sd => stem(`m|${p}|${sd}`, ML, (c, o) => music(c, o, ML, p, sd), x => onP?.('Compondo música (loop)', x), { tail: 2.5, keep: true });
+  const mus = musicBuf || await song(seed);
+  // estrutura de cinema: trilha do teaser e uma por capítulo (até 4 distintas)
+  const kSeed = k => k === 1 ? seed : seed + (k === 0 ? 777 : 101 * (2 + (k - 2) % 3));
+  const secs = musicBuf || !sections.length ? [] : await Promise.all(sections.map(async x => ({ t: x.t, m: await song(kSeed(x.k)) })));
   const amB = kind === 'none' ? null : await stem(`a|${kind}|${seed}`, 16, (c, o) => ambience(c, o, 16, kind, seed), x => onP?.('Gerando ambiente (loop)', x), { tail: 1.5, keep: true });
   onP?.('Efeitos sonoros', null);
   const fx = await renderEvents([...extra, ...sfxEvents(segs, timeline, pk, seed), ...(intro?.sound && intro.sound !== 'none' ? stingEvents(intro.sound, intro.dur) : [])], D);
-  return mixJS({ voice, mus, amB, fx, D, timeline, intro, vol, norm }, onP);
+  return mixJS({ voice, mus, secs, amB, fx, D, timeline, intro, vol, norm }, onP);
 }
 
 // mixagem final em JS puro: ducking da música sob a voz, fades, soft-clip e normalização
-async function mixJS({ voice, mus, amB, fx, D, timeline, intro, vol, norm }, onP) {
+async function mixJS({ voice, mus, secs = [], amB, fx, D, timeline, intro, vol, norm }, onP) {
   const N = Math.ceil(D * SR), out = new AudioBuffer({ length: N, sampleRate: SR, numberOfChannels: 2 });
   const zones = timeline.map(s => [Math.max(0, s.start - .25) * SR, (s.end + .1) * SR]), introEnd = intro?.sound && intro.sound !== 'none' ? intro.dur * .8 * SR : -1;
   const kd = 1 - Math.exp(-1 / (.08 * SR)), ku = 1 - Math.exp(-1 / (.3 * SR)), kf = 1 - Math.exp(-1 / (.5 * SR)), ko = 1 - Math.exp(-1 / (.4 * SR)), fo = (D - 1.8) * SR;
   const ch = (b, c) => b?.getChannelData(Math.min(c, b.numberOfChannels - 1));
   for (let c = 0; c < 2; c++) {
-    const o = out.getChannelData(c), v = ch(voice, c), m = ch(mus, c), a = ch(amB, c), f = fx.getChannelData(c), ml = m.length, al = a?.length || 1, vl = v.length;
-    let duck = 1, fin = 0, fout = 1, z = 0;
+    const o = out.getChannelData(c), v = ch(voice, c), a = ch(amB, c), f = fx.getChannelData(c), al = a?.length || 1, vl = v.length;
+    // trilhas por seção com crossfade de 2 s na troca
+    const S = secs.length ? secs.map(x => ({ i: Math.round(x.t * SR), d: ch(x.m, c) })) : [{ i: 0, d: ch(mus, c) }], XF = 2 * SR;
+    let duck = 1, fin = 0, fout = 1, z = 0, q = 0;
     for (let i = 0; i < N; i++) {
       if (i % (SR * 20) === 0 && i) { onP?.('Mixagem final', (c + i / N) / 2); await new Promise(r => setTimeout(r)); }
       while (z < zones.length && i > zones[z][1]) z++;
       const tgt = i < introEnd ? .35 : z < zones.length && i >= zones[z][0] ? .28 : 1;
       duck += (tgt - duck) * (tgt < duck ? kd : ku); fin += (1 - fin) * kf; if (i > fo) fout += (0 - fout) * ko;
-      let x = (i < vl ? v[i] : 0) * vol.voice + m[i % ml] * duck * fin * fout * vol.music + (a ? a[i % al] * fin * fout * vol.amb : 0) + f[i] * fout * vol.sfx;
+      while (q + 1 < S.length && i >= S[q + 1].i) q++;
+      const cur = S[q].d, xf = q && i - S[q].i < XF ? (i - S[q].i) / XF : 1, mv = cur[i % cur.length] * xf + (xf < 1 ? S[q - 1].d[i % S[q - 1].d.length] * (1 - xf) : 0);
+      let x = (i < vl ? v[i] : 0) * vol.voice + mv * duck * fin * fout * vol.music + (a ? a[i % al] * fin * fout * vol.amb : 0) + f[i] * fout * vol.sfx;
       const ax = Math.abs(x); if (ax > .8) x = Math.sign(x) * (.8 + .2 * Math.tanh((ax - .8) / .2));
       o[i] = x;
     }

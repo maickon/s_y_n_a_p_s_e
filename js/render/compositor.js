@@ -4,7 +4,7 @@ import { build, prepare, W, H, T, cl, ease } from './layouts.js';
 import { STYLES } from '../core/styles.js';
 import { drawCaptions, drawWatermark } from './captions.js';
 import { drawCards } from './cards.js';
-import { drawIntro, drawOutro, drawKinetic } from './titles.js';
+import { drawIntro, drawOutro, drawKinetic, drawChapter } from './titles.js';
 
 const K = 1.5; // render interno 1920x1080
 
@@ -47,6 +47,7 @@ export async function createCompositor(canvas, bgCanvas) {
       if (cs) { g.font = '13px "Fira Code", monospace'; g.fillStyle = 'rgba(255,255,255,.5)'; const L = tx.wm?.type !== 'none' && tx.wm?.pos === 'br'; g.textAlign = L ? 'left' : 'right'; g.fillText(cs.slice(0, 80), L ? 18 : W - 18, H - 12); }
       const full = drawCards(g, t, dir.vt, timeline, tx);
       if (tx.cap && !full) { drawKinetic(g, t, dir.kin, segs, tx); drawCaptions(g, caps, t, W, H, tx); }
+      drawChapter(g, t, dir.chapters, tx);
       drawIntro(g, t, dir.intro, tx); drawOutro(g, t, dir.outro, tx); drawWatermark(g, W, H, tx.wm);
       capT.source.update();
       app.renderer.render(app.stage);

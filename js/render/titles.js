@@ -80,3 +80,23 @@ export function drawKinetic(g, t, K = [], segs = [], o = {}) {
     g.restore();
   }
 }
+
+// cartão de capítulo: "CAPÍTULO N" espaçado + título grande, entra e sai em fade sobre o plano da pausa
+export function drawChapter(g, t, C = [], o = {}) {
+  const c = C.find(x => t >= x.a && t < x.b); if (!c) return false;
+  FONT = fontOf(o, 'title');
+  const p = t - c.a, k = cl((p - .25) / .7) * cl((c.b - .45 - t) / .5), A = o.accent || '#00ff66';
+  g.save();
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(0,0,0,.15)'); gr.addColorStop(.5, `rgba(0,0,0,${.55 * cl(p / .6)})`); gr.addColorStop(1, 'rgba(0,0,0,.15)');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  g.globalAlpha = k; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const lw = Math.min(W * .5, 420) * ease((p - .2) / 1.1);
+  g.fillStyle = A; g.fillRect(W / 2 - lw / 2, H / 2 - 4, lw, 2);
+  g.font = `600 ${Math.round(Math.min(W, H) * .028)}px "Fira Code", monospace`; g.fillStyle = A;
+  g.letterSpacing = '0.45em'; g.fillText(`CAPÍTULO ${c.n}`, W / 2 + 6, H / 2 - Math.min(W, H) * .07); g.letterSpacing = '0px';
+  fit(g, (c.title || '').toUpperCase(), Math.round(Math.min(W, H) * .085), W * .84);
+  g.shadowColor = 'rgba(0,0,0,.8)'; g.shadowBlur = 24; g.fillStyle = o.color || '#fff';
+  g.fillText((c.title || '').toUpperCase(), W / 2, H / 2 + Math.min(W, H) * .07 + 6 * (1 - k));
+  g.restore();
+  return true;
+}

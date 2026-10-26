@@ -60,6 +60,16 @@
           <label class="row"><input type="checkbox" id="vtype-auto" data-persist checked> Ajustar estilo, legenda, música e efeitos ao tipo</label>
           <button id="vtype-fmt" class="btn !py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Reformatar roteiro neste tipo</button>
         </div>
+        <div id="cine-box" class="flex flex-col gap-2 bg-black/30 rounded-lg p-2 border border-zinc-800">
+          <label class="row font-bold text-purple-300"><input type="checkbox" id="cine-on" data-persist checked> Estrutura de cinema</label>
+          <label>Abertura sem narração <span id="cine-teaser-v" class="val">5 s</span><input type="range" id="cine-teaser" data-persist min="0" max="8" step="1" value="5"></label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="fl">Capítulos<select id="cine-chap" data-persist class="inp"><option value="auto">Automáticos</option><option value="marks">Só marcados</option><option value="off">Desligados</option></select></label>
+            <label class="fl">Respiros<select id="cine-breath" data-persist class="inp"><option value="none">Nenhum</option><option value="low">Poucos</option><option value="med" selected>Médios</option><option value="high">Muitos</option></select></label>
+          </div>
+          <label class="row"><input type="checkbox" id="cine-music" data-persist checked> Trocar a música a cada capítulo</label>
+          <span class="text-[10px] text-zinc-500 leading-relaxed">No roteiro: <b class="text-zinc-300">## Título</b> ou <b class="text-zinc-300">Capítulo 2: Título</b> abre um capítulo (não é narrado); <b class="text-zinc-300">linha em branco</b> cria um respiro.</span>
+        </div>
         <div class="flex justify-between items-center"><span class="text-zinc-500">Cada frase ou linha vira uma cena.</span><button id="btn-preset" class="text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><i data-lucide="sparkles" class="w-3 h-3"></i> Exemplo</button></div>
         <textarea id="script-input" data-persist class="inp flex-1 min-h-[240px] text-emerald-300 resize-none leading-relaxed text-[13px]" placeholder="Escreva o roteiro..."></textarea>
         <div class="flex justify-between text-zinc-500"><span id="char-count">0 caracteres</span><span>Ctrl+Enter gera a prévia</span></div>

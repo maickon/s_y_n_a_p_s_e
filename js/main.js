@@ -30,6 +30,7 @@ import { loadImage } from './media/loader.js';
 import { SOURCES as TSRC, EXTERNAL as TEXT, trends } from './media/trends.js';
 import { scriptFromTopic, sentences } from './core/scriptgen.js';
 import { TYPES, PRESETS, parseScene, formatScript, cardEvents } from './core/vtypes.js';
+import { CINE_DEF, structure, cinemaPlan, withBreaks, breakEvents, musicSections } from './core/cinema.js';
 import { createPlayer } from './ui/player.js';
 import { createTimeline } from './ui/timeline.js';
 import { enhance, enhanceSelects, refreshRanges, tooltips } from './ui/controls.js';
@@ -49,7 +50,7 @@ const el = { txt: $('script-input'), voice: $('voice-select'), style: $('style-s
 let cv = $('view-canvas'), bg = createBg(), comp = await createCompositor(cv, bg.canvas);
 const frame = (t, o) => { bg.draw(); comp.render(t, o); };
 const EXP = ['btn-export', 'btn-wav', 'btn-srt', 'btn-mp4', 'btn-hf'];
-let ctx, rec, track, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
+let ctx, rec, track, base, struct = { lines: [], chapters: {}, paras: new Set() }, cineMemo = {}, caps = [], segsCur = [], mix, music = null, busy = false, P = [], dir = {}, variation = 0, ov = [];
 
 // status no topo + painel flutuante (etapas em andamento)
 const status = (t, c = 'bg-zinc-600', p) => { $('status-text').textContent = $('status-text').title = t; $('status-indicator').className = `w-2 h-2 rounded-full ${c}`; if (!/animate-pulse/.test(c)) return progDone();
@@ -93,19 +94,29 @@ async function run(fn) {
   if (mix) ['btn-vary', ...EXP].forEach(b => enable($(b), true));
 }
 
+// estrutura de cinema: aplica as pausas sobre a voz base (memorizado)
+const cineCfg = () => ({ on: $('cine-on').checked, teaser: +$('cine-teaser').value, chap: $('cine-chap').value, breath: $('cine-breath').value, music: $('cine-music').checked });
+function rebuild() {
+  const ic = introCfg();
+  if (Math.abs(base.lead - ic.dur) > .01) shiftTrack(ic.dur);
+  const cfg = cineCfg(), plan = cinemaPlan(struct, base.timeline.map(s => s.text), cfg, SCENE), k = JSON.stringify([plan, base.lead]);
+  if (cineMemo.base === base && cineMemo.k === k) return;
+  track = withBreaks(base, plan); cineMemo = { base, k };
+  caps = groups(track.timeline, capMax());
+}
 // edição -> mix -> reprodução/gravação
 async function render() {
   const ic = introCfg();
-  if (Math.abs(track.lead - ic.dur) > .01) shiftTrack(ic.dur);
+  rebuild();
   dir = direct(track.timeline, P, { variation, ov, grades: STYLES[el.style.selectedIndex].grades, grade: $('grade-select').value, title: $('video-title').value.trim(),
     credits: ['Voz: ' + el.voice.selectedOptions[0].text + ' · ' + el.voice.value.split(':')[0], 'Música: ' + (music?.name || 'procedural S.Y.N.A.P.S.E')],
-    vt: { type: $('vtype').value, cards }, intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
+    vt: { type: $('vtype').value, cards }, breaks: track.breaks, intro: ic, outro: { on: $('outro-on').checked, auto: $('outro-auto').checked, title: $('outro-title').value.trim(), lines: $('outro-lines').value.split('\n').map(s => s.trim()).filter(Boolean) } });
   readText();
   comp.load(segsCur = dir.segs);
   if (!pl.playing) drawAt(pl.time); // o visual atualiza na hora; o áudio entra quando a mixagem terminar
   status('MIXANDO ÁUDIO...', 'bg-yellow-400 animate-pulse');
   const mo = { voice: track.buffer, voiceKey: track.key, timeline: track.timeline, segs: segsCur, duration: dir.duration, style: el.style.selectedIndex, seed: hash(curId) + variation,
-    musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, extra: cardEvents(cards, track.timeline), intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
+    musicBuf: music?.buf, musicName: music?.name, amb: $('amb-select').value, pack: $('sfx-pack').value, prof: $('music-prof').value, extra: [...cardEvents(cards, track.timeline), ...breakEvents(track.breaks)], sections: musicSections(track.breaks, cineCfg().music), intro: ic.vig && { dur: ic.dur, sound: ic.vig.snd === 'auto' ? VIG_AUTO_SND[ic.vig.tpl] : ic.vig.snd }, vol: { voice: 1, music: v('vol-music') * .7, amb: v('vol-amb') * .6, sfx: v('vol-sfx') * .8 } };
   // mixagem salva por projeto: se nada mudou, carrega na hora
   const mk = mixKey(mo), saved = mixMem?.key === mk ? mixMem : await store.get('mix:' + curId);
   if (saved?.key === mk && (saved.buf || saved.blob)) { prog('Carregando mixagem salva', null); mix = saved.buf || await unpackBuf(saved); }
@@ -128,19 +139,19 @@ let pendingGen = false, restored = null, dirty = false, mixMem = null, cards = [
 $('btn-manifest').onclick = () => generate();
 function generate() {
   if (busy) return pendingGen = true;
-  const raw = splitScenes(el.txt.value), type = $('vtype').value;
+  const S = structure(el.txt.value), raw = S.lines, type = $('vtype').value;
   if (!raw.length) return warn('Digite um roteiro válido.');
   const parsed = raw.map((x, i) => parseScene(x, type, i, raw));
   run(async () => {
-    track = await makeTrack(parsed.map(p => p.say)); cards = parsed.map(p => p.card);
+    base = await makeTrack(parsed.map(p => p.say)); cards = parsed.map(p => p.card); struct = S;
     if ($('ai-sync').checked) try {
       status('WHISPER: CARREGANDO...', 'bg-yellow-400 animate-pulse');
-      const ak = 'asr:' + track.key, asr = await store.get(ak) || await transcribe(track.dry, e => e.status === 'progress' && e.file?.endsWith('.onnx') && status('WHISPER: BAIXANDO MODELO', 'bg-yellow-400 animate-pulse', e.progress / 100));
+      const ak = 'asr:' + base.key, asr = await store.get(ak) || await transcribe(base.dry, e => e.status === 'progress' && e.file?.endsWith('.onnx') && status('WHISPER: BAIXANDO MODELO', 'bg-yellow-400 animate-pulse', e.progress / 100));
       store.set(ak, asr);
       status('WHISPER: ALINHANDO...', 'bg-yellow-400 animate-pulse');
-      track.timeline = align(track.timeline, asr);
+      base.timeline = align(base.timeline, asr);
     } catch (e) { console.warn('Whisper indisponível, usando estimativa', e); }
-    caps = groups(track.timeline, capMax());
+    cineMemo = {}; rebuild();
     await syncUrls();
     const texts = track.timeline.map(s => s.text), R = restored && restored.texts?.join('\n') === texts.join('\n') ? restored : null;
     if (R) { P = R.P.map(l => l.map(id => assets.find(a => a.id === id)).filter(Boolean)); variation = R.variation || 0; ov = (R.ov || []).map(o => o && { ...o, img: o.img && assets.find(a => a.id === o.img) }); }
@@ -160,7 +171,7 @@ async function flush() {
   if (busy) return liveT = setTimeout(flush, 300);
   const lv = pend; pend = 0;
   await run(async () => {
-    if (lv >= 4) { track = await makeTrack(track.timeline.map(s => s.text)); caps = groups(track.timeline, capMax()); }
+    if (lv >= 4) { base = await makeTrack(base.timeline.map(s => s.text)); rebuild(); }
     if (lv >= 3) { await syncUrls(); P = await plan(track.timeline, { search: $('img-search').checked, clip: $('img-clip').checked, onStatus: m => status(m, 'bg-yellow-400 animate-pulse'), ar: VW / VH, queries: ov.map(o => o?.q), title: $('video-title').value }); }
     await render();
   });
@@ -306,7 +317,7 @@ document.addEventListener('keydown', e => {
 });
 const goTo = img => { const s = segsCur.find(x => x.img === img); if (s) { selectScene(s.scene); pl.seek(s.a + .5); } };
 
-window.synapse = { assets, get timeline() { return track?.timeline; }, get range() { return pl.range; }, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
+window.synapse = { assets, get timeline() { return track?.timeline; }, get breaks() { return track?.breaks; }, get dir() { return dir; }, get range() { return pl.range; }, get comp() { return comp; }, get segs() { return segsCur; }, frame: drawAt, get duration() { return mix?.duration || 0; } };
 
 // --- Trilha sonora ---
 el.style.innerHTML = STYLES.map(s => `<option>${s.n}</option>`).join('');
@@ -359,7 +370,7 @@ const escH = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let sel = 0, follow = true;
 // timeline + inspetor da cena selecionada
 function editor() {
-  tl.render({ duration: mix.duration, segs: segsCur, caps, wave: track.dry.getChannelData(0), intro: dir.intro.b - .2, outro: dir.outro.off ? null : [dir.outro.a, dir.outro.b], music: music?.name || 'Trilha procedural · ' + STYLES[el.style.selectedIndex].n, sting: !!introCfg().vig });
+  tl.render({ duration: mix.duration, segs: segsCur, caps, wave: track.dry.getChannelData(0), intro: dir.intro.b - .2, outro: dir.outro.off ? null : [dir.outro.a, dir.outro.b], music: music?.name || 'Trilha procedural · ' + STYLES[el.style.selectedIndex].n, sting: !!introCfg().vig, breaks: track.breaks });
   sel = Math.min(sel, track.timeline.length - 1); tl.select(sel); inspector();
 }
 function selectScene(i, seek) {
@@ -426,11 +437,11 @@ function introCfg() {
 }
 // desloca a trilha de voz quando a duração da abertura muda (sem re-sintetizar)
 function shiftTrack(L) {
-  const d = L - track.lead, sr = track.buffer.sampleRate, n = Math.round(d * sr);
+  const track = base, d = L - track.lead, sr = track.buffer.sampleRate, n = Math.round(d * sr);
   const mv = b => { const o = new AudioBuffer({ length: Math.max(1, b.length + n), sampleRate: sr, numberOfChannels: b.numberOfChannels }); for (let c = 0; c < b.numberOfChannels; c++) n >= 0 ? o.getChannelData(c).set(b.getChannelData(c), n) : o.getChannelData(c).set(b.getChannelData(c).subarray(-n)); return o; };
   track.buffer = mv(track.buffer); track.dry = mv(track.dry);
   track.timeline.forEach(s => { s.start += d; s.end += d; s.words.forEach(w => { w.s += d; w.e += d; }); });
-  track.duration += d; track.lead = L; caps = groups(track.timeline, capMax());
+  track.duration += d; track.lead = L;
 }
 $('vig-tpl').innerHTML = Object.entries(VIG_TPL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 $('vig-snd').innerHTML = Object.entries(VIG_SND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
@@ -655,7 +666,17 @@ function applyPreset() {
   set('style-select', el.style.options[P.style].value); set('cap-style', P.cap); set('music-prof', P.prof); set('sfx-pack', P.sfx); set('amb-select', P.amb); if (P.grade) set('grade-select', P.grade);
   G.prof?.select(P.prof); G.sfx?.select(P.sfx); G.amb?.select(P.amb); readText();
 }
-$('vtype').addEventListener('change', () => { typeUI(); applyPreset(); if (track) { lastGen = el.txt.value; generate(); } });
+// estrutura de cinema conforme o tipo (com "Ajustar ao tipo" ligado)
+function applyCine() {
+  const C = CINE_DEF[$('vtype').value]; if (!C || !$('vtype-auto').checked) return;
+  $('cine-on').checked = C.on; $('cine-teaser').value = C.teaser; $('cine-chap').value = C.chap; $('cine-breath').value = C.breath; $('cine-music').checked = C.music;
+  cineUI(); ['cine-on', 'cine-chap', 'cine-breath', 'cine-music'].forEach(id => $(id).dispatchEvent(new Event('change', { bubbles: true })));
+}
+const cineUI = () => { $('cine-teaser-v').textContent = +$('cine-teaser').value ? $('cine-teaser').value + ' s' : 'sem'; $('cine-box').classList.toggle('opacity-50', !$('cine-on').checked); };
+$('cine-teaser').addEventListener('input', cineUI); cineUI();
+on('cine-on cine-chap cine-breath cine-music cine-teaser', 'change', 2);
+$('cine-on').addEventListener('change', cineUI);
+$('vtype').addEventListener('change', () => { typeUI(); applyPreset(); applyCine(); if (track) { lastGen = el.txt.value; generate(); } });
 $('vtype-fmt').onclick = () => {
   const t = $('vtype').value, ss = sentences(el.txt.value.replace(/^(#\s*\d+.*|passo\s*\d+\s*:\s*|\d{1,4}(\s*a\.C\.)?\s*\|\s*|urgente\s*:\s*|você sabia que\s*)/gim, ''));
   el.txt.value = formatScript(t, ss.length ? ss : splitScenes(el.txt.value), { n: +$('vtype-n').value || 5, title: $('video-title').value.trim() });

@@ -18,7 +18,8 @@ export function createTimeline(inner, scroll, { onSeek, onSelect, onEdit }) {
     const ruler = Array.from({ length: Math.floor(D / step) + 1 }, (_, k) => k * step).map(s => `<span class="tl-tick" style="left:${pct(s)}">${fmt(s)}</span>`).join('');
     const clip = (a, b, cls, html, attr = '') => `<div class="tl-clip ${cls}" ${attr} style="left:${pct(a)};width:${pct(b - a)}">${html}</div>`;
     const scenes = d.segs.map(s => clip(s.a, s.b, '', `<span>${s.scene + 1}</span>`, `data-scene="${s.scene}" title="Cena ${s.scene + 1}" data-bg="${esc(s.img.src)}"`)).join('')
-      + (d.intro > .5 ? clip(0, d.intro, 'tl-mark', '<span>Abertura</span>') : '') + (d.outro ? clip(d.outro[0], d.outro[1], 'tl-mark', '<span>Final</span>') : '');
+      + (d.intro > .5 ? clip(0, d.intro, 'tl-mark', '<span>Abertura</span>') : '') + (d.outro ? clip(d.outro[0], d.outro[1], 'tl-mark', '<span>Final</span>') : '')
+      + (d.breaks || []).map(b => clip(b.a, b.b, 'tl-mark tl-brk', `<span>${b.kind === 'teaser' ? '▶ Teaser' : b.kind === 'chapter' ? `Cap. ${b.n} · ${esc(b.title || '')}` : '◦ Respiro'}</span>`, `title="${b.kind === 'teaser' ? 'Abertura sem narração' : b.kind === 'chapter' ? 'Capítulo ' + b.n + ': ' + esc(b.title || '') : 'Respiro'} · ${(b.b - b.a).toFixed(1)} s"`)).join('');
     const caps = d.caps.map(g => clip(g.s, g.e, 'tl-cap', esc(g.txt), `title="${esc(g.txt)}"`)).join('');
     const audio = clip(0, D, 'tl-aud', `♪ ${esc(d.music)}`) + (d.sting ? clip(0, d.intro, 'tl-sting', '✦') : '');
     inner.innerHTML = `<div class="tl-row tl-ruler">${ruler}</div><div class="tl-row">${scenes}</div><div class="tl-row"><canvas class="absolute inset-0 w-full h-full"></canvas></div><div class="tl-row">${caps}</div><div class="tl-row">${audio}</div>`;
