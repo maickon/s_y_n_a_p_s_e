@@ -6,7 +6,8 @@ mod neural;
 mod piper;
 mod whisper;
 use std::sync::Arc;
-use tauri::{ipc::{InvokeBody, Request, Response}, AppHandle, State};
+use tauri::{ipc::{InvokeBody, Request, Response}, AppHandle, Emitter, State};
+use tauri_plugin_updater::UpdaterExt;
 
 pub fn hash(s: &str) -> u64 { s.bytes().fold(1469598103934665603u64, |h, b| (h ^ b as u64).wrapping_mul(1099511628211)) }
 type R<T> = Result<T, String>;
@@ -16,12 +17,12 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> R<T> + Send + 'static) 
 
 // informações do sistema para o front (ponte nativa)
 #[tauri::command]
-fn info() -> serde_json::Value {
+fn info(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "cpus": std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
-        "version": env!("CARGO_PKG_VERSION"),
+        "version": app.package_info().version.to_string(),
         "features": ["piper", "ffmpeg", "whisper", "kv", "neural"]
     })
 }
@@ -92,16 +93,31 @@ async fn http_get(url: String) -> R<String> {
     blocking(move || ureq::AgentBuilder::new().try_proxy_from_env(true).timeout(std::time::Duration::from_secs(15)).build().get(&url).set("User-Agent", "Mozilla/5.0 SYNAPSE").call().map_err(|e| e.to_string())?.into_string().map_err(|e| e.to_string())).await
 }
 
+// atualização: verifica a última versão publicada (assinada) e instala com progresso
+#[tauri::command]
+async fn update_check(app: AppHandle) -> R<Option<serde_json::Value>> {
+    let u = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    Ok(u.map(|u| serde_json::json!({ "version": u.version, "current": u.current_version, "notes": u.body, "date": u.date.map(|d| d.to_string()) })))
+}
+#[tauri::command]
+async fn update_install(app: AppHandle) -> R<()> {
+    let u = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?.ok_or("já está na última versão")?;
+    let (a, mut got) = (app.clone(), 0usize);
+    u.download_and_install(move |n, total| { got += n; let _ = a.emit("update-dl", serde_json::json!({ "loaded": got, "total": total })); }, || {}).await.map_err(|e| e.to_string())?;
+    app.restart()
+}
+
 #[tauri::command]
 fn reveal(path: String) { ffmpeg::reveal(&path) }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
         .manage(Arc::new(neural::Neural::default()))
-        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get])
+        .invoke_handler(tauri::generate_handler![info, piper_tts, whisper, ff_start, ff_frame, ff_finish, ff_cancel, reveal, kv_get, kv_set, kv_del, kv_keys, save_doc, neural_tts, neural_setup, http_get, update_check, update_install])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o S.Y.N.A.P.S.E");
 }

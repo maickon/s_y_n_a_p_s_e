@@ -1,11 +1,29 @@
 name: Desktop (Tauri)
+# a cada atualização do sistema: nova versão numerada, instaladores e latest.json (o app avisa e se atualiza)
 on:
   workflow_dispatch:
   push:
-    tags: ['desktop-v*']
+    branches: [master]
+    paths: ['index.html', 'css/**', 'js/**', 'vendor/**', 'hyperframes/**', 'desktop/**', '.github/workflows/desktop.yml']
+concurrency: { group: desktop, cancel-in-progress: true }
+permissions: { contents: write }
+env:
+  VERSION: 0.2.${{ github.run_number }}
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs: { id: '${{ steps.r.outputs.result }}' }
+    steps:
+      - id: r
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({ owner: context.repo.owner, repo: context.repo.repo,
+              tag_name: `desktop-v${process.env.VERSION}`, target_commitish: context.sha, name: `S.Y.N.A.P.S.E Desktop v${process.env.VERSION}`,
+              body: `Atualização automática (${context.sha.slice(0, 7)}): ${context.payload.head_commit?.message?.split('\n')[0] || 'build manual'}`, draft: true });
+            return data.id;
   build:
-    permissions: { contents: write }
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +39,8 @@ jobs:
       GGML_AVX2: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
       GGML_FMA: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
       GGML_F16C: ${{ matrix.os == 'macos-latest' && 'OFF' || 'ON' }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,6 +52,11 @@ jobs:
         with: { workspaces: desktop/src-tauri }
       - run: npm ci
         working-directory: desktop
+      - name: Versão (e sem chave de assinatura = sem atualizador)
+        shell: bash
+        working-directory: desktop/src-tauri
+        run: |
+          node -e "const f='tauri.conf.json',c=require('./'+f);c.version=process.env.VERSION;if(!process.env.TAURI_SIGNING_PRIVATE_KEY){c.bundle.createUpdaterArtifacts=false;console.log('::warning::Secret TAURI_SIGNING_PRIVATE_KEY ausente: build sem atualização automática')}require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
       - name: Compilar (erros viram anotações)
         shell: bash
         working-directory: desktop
@@ -43,7 +68,13 @@ jobs:
         env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
         with:
           projectPath: desktop
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'desktop-dev' }}
-          releaseName: 'S.Y.N.A.P.S.E Desktop ${{ startsWith(github.ref, ''refs/tags/'') && github.ref_name || ''(dev)'' }}'
-          releaseDraft: true
-          prerelease: true
+          releaseId: ${{ needs.release.outputs.id }}
+  publish: # só vira "latest" quando todos os sistemas terminaram (latest.json completo)
+    needs: [release, build]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({ owner: context.repo.owner, repo: context.repo.repo, release_id: ${{ needs.release.outputs.id }}, draft: false, prerelease: false, make_latest: 'true' });

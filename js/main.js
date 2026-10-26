@@ -787,7 +787,21 @@ await store.bindForm(() => {
   vigUI(); typeUI(); refreshRanges(); count(); $('pitch-val').textContent = el.pitch.value; $('rate-val').textContent = el.rate.value; });
 await applyAspect();
 galleries(); enhance(); tooltips();
-if (isDesktop) nativeInfo.then(i => { document.querySelector('h1')?.insertAdjacentHTML('afterend', `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300" title="${i ? i.os + ' · ' + i.cpus + ' núcleos' : ''}">DESKTOP</span>`); });
+// desktop: selo (clique = procurar atualização) + verificação automática ao abrir
+async function checkUpdate(manual) {
+  let u; try { u = await native('update_check'); } catch (e) { return manual && warn(/release JSON|404/.test(e) ? 'Ainda não há uma versão com atualização automática publicada. Assim que a próxima for publicada, o app avisa aqui.' : 'Não foi possível verificar atualizações: ' + e); }
+  if (!u) return manual && modal({ title: 'Atualizado', icon: '✓', msg: 'Você já está na versão mais recente.' });
+  if (!await modal({ title: `Nova versão ${u.version} disponível`, icon: '⬆', msg: `Versão atual: ${u.current}.${u.notes ? '\n\n' + u.notes.slice(0, 600) : ''}\n\nO app baixa a atualização e reinicia sozinho (seus projetos ficam salvos).`,
+    buttons: [{ label: 'Depois', value: false }, { label: 'Atualizar agora', value: true, primary: true }] })) return;
+  await flushProj().catch(() => { });
+  const m = progress({ title: `Baixando a versão ${u.version}` }), off = await listen('update-dl', d => d.total && m.set(d.loaded / d.total, `${(d.loaded / 1048576).toFixed(1)} / ${(d.total / 1048576).toFixed(1)} MB`));
+  try { await native('update_install'); } catch (e) { warn('Falha na atualização: ' + e); } finally { off(); m.close(); }
+}
+if (isDesktop) nativeInfo.then(i => {
+  document.querySelector('h1')?.insertAdjacentHTML('afterend', `<button id="btn-upd" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 shrink-0" title="v${i?.version || '?'} · ${i ? i.os + ' · ' + i.cpus + ' núcleos' : ''} · clique para procurar atualização">DESKTOP v${i?.version || ''}</button>`);
+  $('btn-upd').onclick = () => checkUpdate(true);
+  setTimeout(() => checkUpdate(false), 8e3);
+});
 // vozes neurais (desktop): instala o motor Python na 1ª vez, com confirmação e progresso
 neural.install = async engine => {
   const xt = engine === 'xtts', ok = await modal({ title: xt ? 'Instalar XTTS (clonagem de voz)' : 'Instalar vozes Kokoro pt-BR', icon: '◈',
