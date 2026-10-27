@@ -26,7 +26,7 @@ export function modal({ title = 'S.Y.N.A.P.S.E', msg = '', html = '', buttons = 
     o.querySelectorAll('[data-i]').forEach(b => b.onclick = () => close(buttons[b.dataset.i].value));
     o.onclick = e => e.target === o && close(null);
     document.addEventListener('keydown', key);
-    o.querySelector('.bg-purple-700')?.focus();
+    if (!/INPUT|TEXTAREA/.test(document.activeElement?.tagName)) o.querySelector('.bg-purple-700')?.focus(); // não interrompe a digitação
   });
 }
 export const info = (msg, title) => modal({ msg, title });

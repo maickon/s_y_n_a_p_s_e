@@ -15,6 +15,7 @@ export const VOICES = {
 };
 
 let piper, kokoro, noNative = false;
+export const engineState = { native: null, error: '' }; // exibido em Sistema
 // vozes neurais: main define install(engine) -> bool; refTag muda quando a amostra de voz muda (invalida o cache)
 export const neural = { install: null, installing: {} };
 export let refTag = await store.get('voiceRefTag') || '';
@@ -22,8 +23,8 @@ export async function setRef(wav) { await store.set('voiceRef', wav); refTag = D
 const engines = {
   async espeak(text, v, speed) { return { buf: await espeak(text, { variant: v, pitch: 45, speed: Math.round(165 * speed) }), native: true }; },
   async piper(text, v, speed, prog) {
-    if (isDesktop && !noNative) try { onDownload(prog); return { buf: await decode(await call('piper_tts', { text, voice: v, speed })), native: true }; } // nativo: rápido e velocidade sem distorção
-    catch (e) { console.warn('Piper nativo falhou, usando o do navegador', e); noNative = true; }
+    if (isDesktop && !noNative) try { onDownload(prog); const r = { buf: await decode(await call('piper_tts', { text, voice: v, speed })), native: true }; engineState.native = true; return r; } // nativo: rápido e velocidade sem distorção
+    catch (e) { console.warn('Piper nativo falhou, usando o do navegador', e); noNative = true; engineState.native = false; engineState.error = String(e).slice(0, 200); }
     const tts = await (piper ??= import(CDN.piper).catch(e => { piper = null; throw e; }));
     return { buf: await decode(await (await tts.predict({ text, voiceId: v }, prog)).arrayBuffer()) };
   },

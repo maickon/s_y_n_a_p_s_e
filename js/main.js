@@ -1,7 +1,7 @@
 import { splitScenes, hash } from './core/script.js';
 import { buildVoiceTrack } from './core/voicetrack.js';
 import { EFFECTS, applyFx } from './audio/fx.js';
-import { VOICES, synth, neural, setRef } from './tts/index.js';
+import { VOICES, synth, neural, setRef, engineState } from './tts/index.js';
 import { audition, gallery, stop as stopAud, hooks as audHooks } from './ui/audition.js';
 import { PROFILES, previewMusic, previewAmb, previewPack, previewSting, clip } from './audio/preview.js';
 import { toWav } from './audio/wav.js';
@@ -847,7 +847,9 @@ async function checkUpdate(manual) {
 }
 const showUpd = async () => { const t = await store.get('upd-last'); $('upd-last').textContent = t ? `Última verificação: ${new Date(t).toLocaleString('pt-BR')}` : ''; };
 nativeInfo.then(async i => {
-  $('sys-info').innerHTML = isDesktop ? `<b class="text-zinc-200">S.Y.N.A.P.S.E Desktop v${i?.version || '?'}</b><br>${i?.os || ''} · ${i?.arch || ''} · ${i?.cpus || '?'} núcleos<br>Recursos nativos: ${(i?.features || []).join(', ')}` : '<b class="text-zinc-200">Versão web</b><br>Sempre atualizada ao recarregar a página.';
+  const eng = () => !isDesktop ? '' : engineState.native === null ? '<br>Voz nativa (Piper): ainda não usada nesta sessão' : engineState.native ? '<br><span class="text-emerald-400">Voz nativa (Piper): funcionando · modelos salvos no disco</span>' : `<br><span class="text-red-400">Voz nativa falhou (usando a do navegador): ${escH(engineState.error)}</span>`;
+  document.querySelector('[data-tab=sys]').addEventListener('click', () => $('sys-eng') && ($('sys-eng').innerHTML = eng()));
+  $('sys-info').innerHTML = isDesktop ? `<b class="text-zinc-200">S.Y.N.A.P.S.E Desktop v${i?.version || '?'}</b><br>${i?.os || ''} · ${i?.arch || ''} · ${i?.cpus || '?'} núcleos<br>Recursos nativos: ${(i?.features || []).join(', ')}<span id="sys-eng">${eng()}</span>` : '<b class="text-zinc-200">Versão web</b><br>Sempre atualizada ao recarregar a página.';
   if (!isDesktop) return;
   document.querySelector('h1')?.insertAdjacentHTML('afterend', `<button id="btn-upd" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/40 shrink-0" title="v${i?.version || '?'} · clique para procurar atualização">DESKTOP v${i?.version || ''}</button>`);
   $('sys-upd').classList.replace('hidden', 'flex');
@@ -903,7 +905,8 @@ const ws = await store.get('ws');
 if (ws) { await Promise.allSettled((ws.ext || []).map(a => addAsset(a))); restored = ws; grid(); }
 const ms = await store.get('music');
 if (ms) try { music = { ...ms, buf: await decodeAudio(ms.blob) }; $('music-name').textContent = '♪ ' + ms.name; $('music-clear').classList.remove('hidden'); } catch { }
-// prévia automática ao abrir
-if ($('auto-gen').checked && el.txt.value.trim()) { lastGen = el.txt.value; generate(); }
+// nada é processado ao abrir: a prévia só é gerada quando o usuário pede (botão Prévia / Ctrl+Enter)
+if (!await store.get('mig-autogen')) { $('auto-gen').checked = false; $('auto-gen').dispatchEvent(new Event('change', { bubbles: true })); store.set('mig-autogen', 1); }
+status('PRONTO · CLIQUE EM PRÉVIA', 'bg-emerald-500');
 showProj();
 dirty = true;
