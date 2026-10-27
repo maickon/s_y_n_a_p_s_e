@@ -1,7 +1,8 @@
-import { CDN } from '../cdn.js';
+import { CDN, localWasm } from '../cdn.js';
 
 let p;
 const load = () => p ??= import(CDN.transformers).then(async T => {
+  localWasm(T.env);
   const id = CDN.clip;
   const [tok, proc, tm, vm] = await Promise.all([T.AutoTokenizer.from_pretrained(id), T.AutoProcessor.from_pretrained(id),
     T.CLIPTextModelWithProjection.from_pretrained(id), T.CLIPVisionModelWithProjection.from_pretrained(id)]);

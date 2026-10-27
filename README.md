@@ -31,3 +31,4 @@ As libs ficam em `vendor/` (ver `vendor/README.md`). O CSS do Tailwind é pré-g
 Mesmo código do site, empacotado como app (Windows, macOS, Linux) em `desktop/`.
 - Instaladores: Actions → **Desktop (Tauri)** → *Run workflow* (ou tag `desktop-v*`); saem como release rascunho.
 - Local: `cd desktop && npm i && npm run dev` (requer Rust).
+- Bibliotecas de IA (transformers.js, voz Piper do navegador, ONNX Runtime) vêm embutidas no app (`desktop/copy.mjs`), sem CDN.

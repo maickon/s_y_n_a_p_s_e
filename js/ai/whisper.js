@@ -1,9 +1,9 @@
-import { CDN } from '../cdn.js';
+import { CDN, localWasm } from '../cdn.js';
 import { isDesktop, call, onDownload } from '../native.js';
 
 let p, prog;
 const asr = () => p ??= import(CDN.transformers).then(({ pipeline, env }) => {
-  env.allowLocalModels = false;
+  env.allowLocalModels = false; localWasm(env);
   return pipeline('automatic-speech-recognition', CDN.whisper, { device: 'wasm', progress_callback: e => prog?.(e) });
 }).catch(e => { p = null; throw e; });
 
