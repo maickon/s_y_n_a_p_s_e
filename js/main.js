@@ -857,8 +857,13 @@ nativeInfo.then(async i => {
   for (const [id, d] of [['upd-auto', true], ['upd-silent', false]]) { $(id).checked = await pref(id, d); $(id).onchange = e => store.set(id, e.target.checked); }
   showUpd();
   if (await pref('upd-auto', true)) setTimeout(() => checkUpdate(false), 8e3);
-  // foco de teclado garantido no webview ao entrar em campos de texto
-  document.addEventListener('focusin', e => /INPUT|TEXTAREA/.test(e.target.tagName) && native('focus_webview').catch(() => { }));
+  // foco de teclado garantido no webview ao entrar em campos de texto; uma vez por campo,
+  // senão o set_focus do WebView2 redispara o focusin no mesmo campo e entra em laço (campo piscando, teclas perdidas)
+  let fwEl = null, fwT = 0;
+  document.addEventListener('focusin', e => {
+    if (!/INPUT|TEXTAREA/.test(e.target.tagName) || (e.target === fwEl && performance.now() - fwT < 2000)) return;
+    fwEl = e.target; fwT = performance.now(); native('focus_webview').catch(() => { });
+  });
 });
 // diagnóstico: mostra se as teclas chegam (keydown) e se viram texto (input)
 {
