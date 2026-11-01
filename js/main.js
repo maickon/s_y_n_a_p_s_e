@@ -857,13 +857,13 @@ nativeInfo.then(async i => {
   for (const [id, d] of [['upd-auto', true], ['upd-silent', false]]) { $(id).checked = await pref(id, d); $(id).onchange = e => store.set(id, e.target.checked); }
   showUpd();
   if (await pref('upd-auto', true)) setTimeout(() => checkUpdate(false), 8e3);
-  // foco de teclado garantido no webview ao entrar em campos de texto; uma vez por campo,
-  // senão o set_focus do WebView2 redispara o focusin no mesmo campo e entra em laço (campo piscando, teclas perdidas)
-  let fwEl = null, fwT = 0;
-  document.addEventListener('focusin', e => {
-    if (!/INPUT|TEXTAREA/.test(e.target.tagName) || (e.target === fwEl && performance.now() - fwT < 2000)) return;
-    fwEl = e.target; fwT = performance.now(); native('focus_webview').catch(() => { });
-  });
+  // reserva para o teclado do WebView2: só no clique do usuário num campo e só se o documento estiver sem foco.
+  // Nunca em focusin/focus: o set_focus gera novos eventos de foco e vira laço (campos piscando, janela travada)
+  let fwT = 0;
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest?.('input,textarea') || document.hasFocus() || performance.now() - fwT < 1000) return;
+    fwT = performance.now(); native('focus_webview').catch(() => { });
+  }, true);
 });
 // diagnóstico: mostra se as teclas chegam (keydown) e se viram texto (input)
 {

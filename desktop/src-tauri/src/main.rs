@@ -107,7 +107,7 @@ async fn update_install(app: AppHandle) -> R<()> {
     app.restart()
 }
 
-// garante o foco de teclado no webview (WebView2/WKWebView) ao entrar num campo de texto
+// devolve o teclado ao webview (WebView2/WKWebView); chamado só no clique do usuário num campo, nunca em eventos de foco
 #[tauri::command]
 fn focus_webview(webview: tauri::Webview) { let _ = webview.set_focus(); }
 
@@ -129,8 +129,8 @@ fn reveal(path: String) { ffmpeg::reveal(&path) }
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // Windows/WebView2: ao a janela ganhar foco, devolve o teclado ao webview (senão os campos não recebem digitação)
-        .on_window_event(|w, e| if let tauri::WindowEvent::Focused(true) = e { for v in w.webviews() { let _ = v.set_focus(); } })
+        // sem set_focus em WindowEvent::Focused: no Windows esse evento vem do GotFocus do WebView2, e o MoveFocus
+        // do set_focus dispara outro GotFocus -> laço infinito (campos piscando, janela não fecha). O wry já move o foco ao webview.
         .manage(Arc::new(piper::Piper::default()))
         .manage(Arc::new(ffmpeg::Ff::default()))
         .manage(Arc::new(whisper::Asr::default()))
