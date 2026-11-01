@@ -21,8 +21,7 @@
       "Read(./desktop/node_modules/**)",
       "Read(./desktop/dist/**)",
       "Read(./desktop/src-tauri/target/**)",
-      "Read(./desktop/src-tauri/gen/**)",
-      "Bash(git push:*)"
+      "Read(./desktop/src-tauri/gen/**)"
     ]
   }
 }
